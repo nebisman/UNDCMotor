@@ -1,7 +1,6 @@
 // Definitions for the DC motor system
 // Created by LB on 1/18/24.
 #include <stdlib.h>
-//
 
 // This is the pwm configuration for the DC motor system
 #define  FREQUENCY_PWM     100
@@ -12,65 +11,66 @@
 #define  CH_PWM_AIN2       1
 
 
-//// This is the configuration of the encoder for sensing position of DC motor
+// This is the configuration of the encoder for sensing position of DC motor
 
 #define CH_ENC_A    25 // Channel A of the motor encoder
 #define CH_ENC_B    26 // Channel B of the motor encoder
 
-
-
-
-
-
-//
-//// This is the configuration for the ws2812 rgb leds that show the temperature and reference
+// This is the configuration for the ws2812 rgb leds that show the temperature and reference
 //#define  LIGHT_PIN         19
 //#define  NUMPIXELS          2
-//
-// Hardware definitions
+
+
+// This is the definition for the two cores of ESP32
 #define CORE_CONTROL 1   // Core 0 is used for control tasks
 #define CORE_COMM    0   // Core 1 is used for mqtt communication
 //
-//
-//// This is the pin for the Dallas 18b20 temperature sensor
-//#define ONE_WIRE_BUS 4
-//
-//// System definitions
-//#define DEFAULT_REFERENCE 40
-//
-//
-//// IOT topic definitions
-//// Topics published by the thermal system
-//#define SYS_USER_SIGNALS_CLOSED       "/thermal/thermal_" PLANT_NUMBER "/user/sig_closed"
-//#define SYS_USER_SIGNALS_OPEN       "/thermal/thermal_" PLANT_NUMBER "/user/sig_open"
-//// Topics received from the user
-//#define USER_SYS_SET_PID           "/thermal/user/thermal_" PLANT_NUMBER "/set_pid"             //1
-//#define USER_SYS_SET_REF           "/thermal/user/thermal_" PLANT_NUMBER "/set_ref"             //2
-//#define USER_SYS_STEP_CLOSED       "/thermal/user/thermal_" PLANT_NUMBER "/step_closed"         //3
+
+
+// System definitions
+#define DEFAULT_REFERENCE 90
+
+
+// IOT topic definitions
+
+// Topics published by the thermal system
+#define SYS_USER_SIGNALS_CLOSED       "/thermal/thermal_" PLANT_NUMBER "/user/sig_closed"
+#define SYS_USER_SIGNALS_OPEN       "/thermal/thermal_" PLANT_NUMBER "/user/sig_open"
+// Topics received from the user
+#define USER_SYS_SET_PID           "/motor/user/motor_" PLANT_NUMBER "/set_pid"             //1
+#define USER_SYS_SET_REF           "/motor/user/motor_" PLANT_NUMBER "/set_ref"             //2
+
+#define USER_SYS_STEP_CLOSED       "/thermal/user/thermal_" PLANT_NUMBER "/step_closed"         //3
 //#define USER_SYS_STAIRS_CLOSED     "/thermal/user/thermal_" PLANT_NUMBER "/stairs_closed"       //4
 //#define USER_SYS_PRBS_OPEN         "/thermal/user/thermal_" PLANT_NUMBER "/prbs_open"           //5
 //#define USER_SYS_STEP_OPEN         "/thermal/user/thermal_" PLANT_NUMBER "/step_open"           //6
 //#define USER_SYS_STEP_OPEN         "/thermal/user/thermal_" PLANT_NUMBER "/step_open"           //6
 //#define USER_SYS_SET_GENCON        "/thermal/user/thermal_" PLANT_NUMBER "/set_gencon"          //7
 //
-//// Integer definitions of topics to avoid comparison with strings, which is more expensive
-//// in terms of computation
-//#define DEFAULT_TOPIC                  0
-//#define USER_SYS_SET_PID_INT           1
-//#define USER_SYS_SET_REF_INT           2
-//#define USER_SYS_STEP_CLOSED_INT       3
+// Integer definitions of topics to avoid comparison with strings, which is more expensive
+// in terms of computation
+#define DEFAULT_TOPIC                  0
+#define USER_SYS_SET_PID_INT           1
+#define USER_SYS_SET_REF_INT           2
+#define USER_SYS_STEP_CLOSED_INT       3
 //#define USER_SYS_STAIRS_CLOSED_INT     4
 //#define USER_SYS_PRBS_OPEN_INT         5
 //#define USER_SYS_STEP_OPEN_INT         6
 //#define USER_SYS_SET_GENCON_INT        7
 //
 //// Codes for modes of control
-//#define GENERAL_CONTROLLER             0
-//#define PID_CONTROLLER                 1
-//
-///* This matrix is the gamma correction for the leds attached to the plant, which allow to "see" the current
-//   temperature and the current reference
-//*/
+#define GENERAL_CONTROLLER             0
+#define PID_CONTROLLER                 1
+
+// Sampling time
+#define SAMPLING_TIME               0.02
+#define BUFFER_SIZE                 25
+
+
+/*  This matrix is the gamma correction for the leds attached to the plant, which allow to "see" the current
+ *  temperature and the current reference
+*/
+
 //const uint8_t gamma8[] = {
 //        0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
 //        0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1,
