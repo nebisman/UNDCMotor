@@ -6,15 +6,17 @@
 #define  FREQUENCY_PWM     100
 #define  RESOLUTION_PWM    12
 #define  PIN_AIN1          2
-#define  PIN_AIN2          4
+#define  PIN_AIN2          1 // WEMOS 4  // ESPS3 1
 #define  CH_PWM_AIN1       0
 #define  CH_PWM_AIN2       1
 
+// this is an output for visualizing the performance of the control routine
+#define  PIN_CLOCK         19
 
 // This is the configuration of the encoder for sensing position of DC motor
 
-#define CH_ENC_A    25 // Channel A of the motor encoder
-#define CH_ENC_B    26 // Channel B of the motor encoder
+#define CH_ENC_A   17//  WEMOS 25  Channel A of the motor encoder
+#define CH_ENC_B   18 // WEMOS 26  Channel B of the motor encoder
 
 // This is the configuration for the ws2812 rgb leds that show the temperature and reference
 //#define  LIGHT_PIN         19
@@ -28,19 +30,19 @@
 
 
 // System definitions
-#define DEFAULT_REFERENCE 90
+#define DEFAULT_REFERENCE 0
 
 
 // IOT topic definitions
 
 // Topics published by the thermal system
-#define SYS_USER_SIGNALS_CLOSED       "/thermal/thermal_" PLANT_NUMBER "/user/sig_closed"
+#define SYS_USER_SIGNALS_CLOSED       "/motor/motor_" PLANT_NUMBER "/user/sig_closed"
 #define SYS_USER_SIGNALS_OPEN       "/thermal/thermal_" PLANT_NUMBER "/user/sig_open"
 // Topics received from the user
 #define USER_SYS_SET_PID           "/motor/user/motor_" PLANT_NUMBER "/set_pid"             //1
 #define USER_SYS_SET_REF           "/motor/user/motor_" PLANT_NUMBER "/set_ref"             //2
 
-#define USER_SYS_STEP_CLOSED       "/thermal/user/thermal_" PLANT_NUMBER "/step_closed"         //3
+#define USER_SYS_STEP_CLOSED       "/motor/user/motor_" PLANT_NUMBER "/step_closed"         //3
 //#define USER_SYS_STAIRS_CLOSED     "/thermal/user/thermal_" PLANT_NUMBER "/stairs_closed"       //4
 //#define USER_SYS_PRBS_OPEN         "/thermal/user/thermal_" PLANT_NUMBER "/prbs_open"           //5
 //#define USER_SYS_STEP_OPEN         "/thermal/user/thermal_" PLANT_NUMBER "/step_open"           //6

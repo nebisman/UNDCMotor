@@ -14,6 +14,7 @@ ESP32Encoder encoderMotor;
 
 // Task handles for resuming and suspending  tasks
 TaskHandle_t h_controlPidTask;
+TaskHandle_t h_publishStateTask;
 
 // PID control default parameters
 float kp = 0.026048;
@@ -22,7 +23,8 @@ float kd  =0.00074865;
 float N = 11.9052;
 float beta = 0.90423;
 float h = SAMPLING_TIME; //sampling time
-const float br = 1/0.99;
+const float br = .9;
+bool reset_int = false;
 
 
 
@@ -35,24 +37,26 @@ float reference = 90;   //  Desired temperature of reference
 float y = 0;            //  Temperature
 float u = 0;            //  Control signal
 float usat = 0;         //  Saturated control signal
-float u_vector[BUFFER_SIZE];
-float y_vector[BUFFER_SIZE];
 
+// These arrays are buffer for sending frames of variables through mqtt
+float uBuffer[BUFFER_SIZE];
+float yBuffer[BUFFER_SIZE];
+float rBuffer[BUFFER_SIZE];
 
 
 // These parameters allow configuring the different user's commands
 float low_val =    0;
 float high_val =   0;
-unsigned long duration;
-unsigned long points = 60;
-unsigned long points_low = 60;
-unsigned long np = 0;
-unsigned long total_time = 0;
+uint32_t duration;
+uint32_t points_high = 50;
+uint32_t points_low = 50;
+uint32_t np = 0;
+uint32_t total_time = 4294967295;
 unsigned int uee_points= (unsigned int) (20/h);
 unsigned int divider = 35;
 unsigned int prbs_points =  63 * divider;
 unsigned int stab_points = (unsigned int) (150/h);
-
+uint16_t frames;
 
 
 //Integer code of the command sent by the user
@@ -107,7 +111,7 @@ char * long2Hex(unsigned long number){
 void hexStringToFloatArray(float* floatArray, const char* hexString, unsigned int numFloats) {
     // This function translates a user-sent hexadecimal string into an array of floats, enabling the transmission
     // of arbitrary signals and parameters of a controller in a state space form.
-    for (size_t i = 0; i < numFloats; ++i) {
+    for (uint i = 0; i < numFloats; ++i) {
         unsigned long temp;
         sscanf(hexString + i * 8, "%8x", &temp); // Read 8 hex digits (32 bits)
         memcpy(floatArray + i, &temp, sizeof(float)); // Copy bits into float
@@ -118,9 +122,9 @@ void hexStringToFloatArray(float* floatArray, const char* hexString, unsigned in
 void hexStringToMatrix(float* matrix, const char* hexString, unsigned int order, unsigned int cols, unsigned int maxcols) {
     // This function translates a user-sent hexadecimal string into a matrix of floats, enabling the transmission
     // of arbitrary signals and parameters of a controller in a state space form.
-    for (size_t i = 0; i < order; ++i) {
+    for (uint i = 0; i < order; ++i) {
         unsigned long temp;
-        for (size_t j = 0; j < cols; j++) {
+        for (uint j = 0; j < cols; j++) {
             sscanf(hexString + (i*cols + j) * 8, "%8x", &temp); // Read 8 hex digits (32 bits)
             memcpy(matrix + (i*maxcols + j ), &temp, sizeof(float)); // Copy bits into float
         }
@@ -128,22 +132,25 @@ void hexStringToMatrix(float* matrix, const char* hexString, unsigned int order,
 
 }
 
-
-String arrayToString(float * array){
-    String arrayStr;
-    for (size_t i = 0; i < BUFFER_SIZE; i++ ){
-        arrayStr.concat(float2Hex(array[i]));
-        if (i < BUFFER_SIZE-1){
-            arrayStr.concat(',');
+String arrayToString(float * array, uint framesize){
+    String arrayHex;
+    for (uint i = 0; i < framesize; i++ ){
+        arrayHex.concat(float2Hex(array[i]));
+        if (i < framesize-1){
+            arrayHex.concat(',');
         }
     }
-    return arrayStr;
+    return arrayHex;
 }
 
 
-
+void suspendControlTasks(){
+    vTaskSuspend(h_controlPidTask);
+}
 
 // These functions handle the WiFi and mqtt communication
+
+
 
 
 void connectMqtt()
@@ -154,7 +161,7 @@ void connectMqtt()
         // mqttClient.subscribe(USER_SYS_STAIRS_CLOSED);
         mqttClient.subscribe(USER_SYS_SET_PID);
         mqttClient.subscribe(USER_SYS_SET_REF);
-       // mqttClient.subscribe(USER_SYS_STEP_CLOSED);
+        mqttClient.subscribe(USER_SYS_STEP_CLOSED);
        // mqttClient.subscribe(USER_SYS_STEP_OPEN);
 //        mqttClient.subscribe(USER_SYS_PRBS_OPEN);
 //        mqttClient.subscribe(USER_SYS_SET_GENCON);
@@ -165,23 +172,16 @@ void connectMqtt()
         printf("Failed MQTT connection code %d \n try again in 3 seconds\n", mqttClient.state());
     }
 }
-void connectWiFi()
-{
-
+void connectWiFi(){
     WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
-    while (WiFi.status() != WL_CONNECTED)
-    {
-        for (char i=0; i <= 12; i++)
-        {
-            Serial.print(".");
-            vTaskDelay(pdMS_TO_TICKS(500));
-        }
-        Serial.println("");
+    while (WiFi.status() != WL_CONNECTED) {
+        Serial.print(".");
+        vTaskDelay(pdMS_TO_TICKS(500));
     }
-    Serial.print("Connected to WIFI through IP: ");
-    Serial.println(WiFi.localIP());
+    printf("\n");
+    printf("Connected to WIFI through IP: %s \n", WiFi.localIP().toString());
+
 }
 
 
@@ -202,21 +202,18 @@ void handleConnections(void *pvParameters) {
 
 
 void IRAM_ATTR onMqttReceived(char* lastTopic, byte* lastPayload, unsigned int lenght) {
+    suspendControlTasks();
     JsonDocument doc;
     if (strstr(lastTopic, USER_SYS_SET_PID)) {
         codeTopic = USER_SYS_SET_PID_INT;
         typeControl = PID_CONTROLLER;
-//        vTaskSuspend(h_identifyTask);
-        vTaskSuspend(h_controlPidTask);
-//        vTaskSuspend(h_generalControlTask);
         deserializeJson(doc, lastPayload);
         kp = hex2Float((const char *) doc["kp"]);
         ki = hex2Float((const char *) doc["ki"]);
         kd = hex2Float((const char *) doc["kd"]);
         N = hex2Float((const char *) doc["N"]);
+        reset_int = true;
         beta = hex2Float((const char *) doc["beta"]);
-        // vTaskSuspend(h_identifyTask);
-
         printf("PID parameters settled:\n\tkp=%0.3f\n\tki=%0.3f\n\tkd=%0.3f\n\tN=%0.3f\n\tBeta=%0.3f\n",
                kp, ki, kd, N, beta);
 
@@ -224,20 +221,39 @@ void IRAM_ATTR onMqttReceived(char* lastTopic, byte* lastPayload, unsigned int l
     }
     else if (strstr(lastTopic, USER_SYS_SET_REF)) {
         codeTopic = USER_SYS_SET_REF_INT;
-        vTaskSuspend(h_controlPidTask);
         deserializeJson(doc, lastPayload);
         reference = hex2Float((const char *) doc["reference"]);
-//        vTaskSuspend(h_identifyTask);
-//        if(typeControl == PID_CONTROLLER) {
-//            vTaskSuspend(h_generalControlTask);
-//            vTaskResume(h_controlPidTask);
-//        }
+        reset_int = true;
+        printf("Reference has been set to %0.2f degrees \n", reference);
+        if(typeControl == PID_CONTROLLER) {
+            vTaskResume(h_controlPidTask);
+        }
 //        else if (typeControl == GENERAL_CONTROLLER) {
 //            vTaskSuspend(h_controlPidTask);
 //            vTaskResume(h_generalControlTask);
 //        }
-        printf("Reference has been set to %0.2f degrees \n", reference);
-        vTaskResume(h_controlPidTask);
+
+    }
+    else if (strstr(lastTopic, USER_SYS_STEP_CLOSED )){
+        codeTopic = USER_SYS_STEP_CLOSED_INT;
+        deserializeJson(doc, lastPayload);
+        low_val = hex2Float((const char *) doc["low_val"]);
+        high_val = hex2Float((const char *) doc["high_val"]);
+        points_high = hex2Long((const char *) doc["points_high"]);
+        points_low = hex2Long((const char *) doc["points_low"]);
+        total_time = points_low + points_high;
+        reset_int = true;
+        printf("Closed loop step response:\n");
+        printf("\tlow value=%0.2f\n\thigh value=%0.2f\n\ttime in high =%0.2f\n\ttime in low=%0.2f\n", low_val,
+               high_val, (float) (points_high * h), (float) (points_low * h));
+        if(typeControl == PID_CONTROLLER) {
+            vTaskResume(h_controlPidTask);
+        }
+//        else if (typeControl == GENERAL_CONTROLLER) {
+//            vTaskSuspend(h_controlPidTask);
+//            vTaskResume(h_generalControlTask);
+//        }
+
     }
 }
 
@@ -248,7 +264,52 @@ void initMqtt() {
     mqttClient.setBufferSize (4096);
 }
 
+void publishStateClosed(uint indexFrame, uint currFrame) {
+    JsonDocument doc;
+    char jsonBuffer[BUFFER_SIZE * 29];
+    doc["r"] = arrayToString(rBuffer, indexFrame + 1);
+    doc["u"] = arrayToString(uBuffer, indexFrame + 1);
+    doc["y"] = arrayToString(yBuffer, indexFrame + 1);
+    doc["frame"] = long2Hex(currFrame);
+    serializeJson(doc, jsonBuffer); // print to client
+    //printf(jsonBuffer);
+    // printf("%s \n", SYS_USER_SIGNALS_CLOSED);
+    mqttClient.publish(SYS_USER_SIGNALS_CLOSED, jsonBuffer);
+}
 
+static void publishStateTask (void *pvParameters) {
+    // local constants
+    uint32_t rv;
+    uint16_t  indexFrame;
+    uint16_t currFrame;
+    uint32_t t0;
+    uint32_t t1;
+    //JsonDocument doc;
+    for (;;) {
+        xTaskNotifyWait(0, 0b0011, &rv, portMAX_DELAY);
+        if (rv & 0b0001) {
+            if (np <= total_time) {
+                indexFrame = (np-1) % BUFFER_SIZE;
+                currFrame = (np-1)/BUFFER_SIZE + 1;
+                rBuffer[indexFrame] = reference;
+                uBuffer[indexFrame] = usat;
+                yBuffer[indexFrame] = y;
+                if (indexFrame == BUFFER_SIZE - 1) {
+                    //t0 = micros();
+                    publishStateClosed(indexFrame, currFrame);
+                   // t1 = micros();
+                    //printf("elapsed= %d\n ", t1-t0);
+                } else if (np == total_time) {
+                   // t0 = micros();
+                    publishStateClosed(indexFrame, currFrame);
+                   // t1 = micros();
+                    //printf("elapsed= %d\n ", t1-t0);
+                }
+
+            }
+        }
+    }
+}
 
 void voltsToMotor( float volts){
     // This function convert a voltage value given in variable volts
@@ -285,31 +346,27 @@ float compDeadZone(float var, float offset, float zm){
 }
 
 
-float computeReference() {
-    float ref = low_val;
-    float percent = 0.5;
+void computeReference() {
 
     switch (codeTopic) {
-        case DEFAULT_TOPIC:
-            ref = DEFAULT_REFERENCE;
-            break;
 
+        case DEFAULT_TOPIC:
+            reference = DEFAULT_REFERENCE;
+            break;
         case USER_SYS_STEP_CLOSED_INT:
-            if (np <= points_low) {
-                ref = low_val;
+            if (np < points_low) {
+                reference = low_val;
+
             }
-            else if (np <= points + points_low) {
-                ref = high_val;
+            else if (np <= total_time) {
+                reference = high_val;
             }
-            else if (np <= points + points_low + 1){
+            else if (np == total_time + 1){
                 voltsToMotor( 0);
                 printf("Closed loop step response completed\n");
-                //typeControl = PID_CONTROLLER;
-                //codeTopic = DEFAULT_TOPIC;
-
+                codeTopic = DEFAULT_TOPIC;
                 //vTaskSuspend(h_controlPidTask);
                 //vTaskSuspend(h_generalControlTask);
-
             }
             np += 1;
             break;
@@ -335,7 +392,6 @@ float computeReference() {
 //            break;
 
     }
-    return ref;
 }
 
 
@@ -348,66 +404,83 @@ static void controlPidTask(void *pvParameters) {
     */
     static bool led_status = false;
     const TickType_t taskPeriod = (pdMS_TO_TICKS(1000*h));
-    TickType_t xLastWakeTime = xTaskGetTickCount();
-    float bi;
-    float ad;
-    float bd;
-    float P;          //  proportional action
-    float D;          //  derivative action
-    float e;
+
+    float bi;      //scaled integral constant
+    float ad;      //scale derivative constant 1
+    float bd;      //scale derivative constant 2
+    float P;       //  proportional action
+    float D;       //  derivative action
+    float e;       //  current error r[n] - y [n]
     static float y_ant = 0;      //  past output
-    static float I = 0;
-
-
-
+    static float I = 0;          // Integral action
     for (;;) {
+        TickType_t xLastWakeTime = xTaskGetTickCount();
         led_status = !led_status;
-        digitalWrite(LED_BUILTIN, led_status);
-        y = encoderMotor.getCount() * pulses2degrees;
-        reference = computeReference();
-        e = reference - y;
+        digitalWrite(PIN_CLOCK, led_status);
 
-        if ((np == 0) & ( codeTopic!= DEFAULT_TOPIC)) {
+        // at start we reset the integral action and the state variables
+        // when receiving a new command
+        if (reset_int) {
             I = 0;
-            y_ant = y;
+            np = 0;
+            reset_int = false;
         }
-
-        bi = ki*h;
+        // reading the encoder
+        y = encoderMotor.getCount() * pulses2degrees;
+        // computing the current reference depending of the current command
+        computeReference();
+        // updating error
+        e = reference - y;
+        // updating controller parameters
+        bi = ki*h;         // integral action scaled to sampling time
+        // filtered derivative constantd
         ad = kd/(N*(kd/N + h));
         bd = kd/(kd/N + h);
-        P = kp*(beta * reference - y);
-        D = ad*D - bd*(y - y_ant); // derivative action
+        P = kp*(beta * reference - y); // proportional actions
+        D =  ad*D - bd*(y - y_ant); // derivative action
         u = P + I + D ; // control signal
-        if (abs(e) <= 0.6){
-            u = 0;
-        }
-        else{
-            u  = compDeadZone(u, 0.3, 0.05);
-        }
+        // Compensation of dead zone for the DC motor
+        u  = compDeadZone(u, 0.4, 0.04);
 
-        usat = constrain(u, -5, 5); //saturated control signal
+        //saturated control signal
+        usat = constrain(u, -5, 5);
         voltsToMotor(usat);
-        I = I + bi *(reference - y) + br*(usat - u);  // calculo de la accion integral
+        // updating integral action
+        I = I + bi *(reference - y) + br*(usat - u);
+        // updating output
         y_ant = y;
-        //xTaskNotify(h_publishStateTask, 0b0001, eSetBits);
+        xTaskNotify(h_publishStateTask, 0b0001, eSetBits);
         vTaskDelayUntil(&xLastWakeTime, taskPeriod);
     }
 }
 
 void setup() {
+    //Setting the maximal priority for setup
     vTaskPrioritySet(nullptr,24);
-    Serial.begin(500000);
-    pinMode(LED_BUILTIN, OUTPUT);
-
+    //This pin is for testing the timing of real time control routines
+    pinMode(PIN_CLOCK , OUTPUT);
     //setting the pwm channels
     ledcSetup(CH_PWM_AIN1  ,  FREQUENCY_PWM, RESOLUTION_PWM);
     ledcSetup(CH_PWM_AIN2  ,  FREQUENCY_PWM, RESOLUTION_PWM);
     ledcAttachPin(PIN_AIN1 , CH_PWM_AIN1);
     ledcAttachPin(PIN_AIN2 , CH_PWM_AIN2);
 
+    //open the serial port for revising the borad messages
+    Serial.begin(115200);
     //setting the encoders
     encoderMotor.attachFullQuad (CH_ENC_B, CH_ENC_A);
-    encoderMotor.setCount (0);
+    encoderMotor.setCount(0);
+
+    //create the task for communication in core 1
+    xTaskCreatePinnedToCore(
+            publishStateTask, // This is communication task
+            "User command IOT",
+            8192,
+            NULL,
+            20,
+            &h_publishStateTask,
+            CORE_COMM
+    );
 
     // Create the task for PID control in core 0.
     xTaskCreatePinnedToCore(
@@ -419,7 +492,6 @@ void setup() {
             &h_controlPidTask,
             CORE_CONTROL
     );
-    //vTaskSuspend(h_controlPidTask);
     connectWiFi();
     initMqtt();
     connectMqtt();
@@ -433,14 +505,22 @@ void setup() {
             CORE_COMM // communications are attached to core 1
     );
     //vTaskSuspend(h_controlPidTask);
+
+
+
 }
 
 
 
 
 void loop() {
-    float e = reference - y;
+    vTaskDelete(nullptr);
     vTaskDelay(1000);
-    printf("ref = %0.2f\t y = %0.2f\n",reference, y);
+    //printf("PID parameters settled:\n\tkp=%0.3f\n\tki=%0.3f\n\tkd=%0.3f\n\tN=%0.3f\n\tBeta=%0.3f\n",
+//    //       kp, ki, kd, N, beta);
+//    vTaskDelay(1000);
+     printf("ref=%0.2f\ty=%0.2f\n",reference, encoderMotor.getCount() * pulses2degrees);
+//    //Serial.println(USER_SYS_STEP_CLOSED);
+//
 
 };
