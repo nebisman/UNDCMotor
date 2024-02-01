@@ -229,8 +229,8 @@ def step_closed(system, low_val=0, high_val=90, low_time=1, high_time=1, filepat
     fig, ax = plt.subplots()
     ax.grid(True);
     ax.grid(color='gray', linestyle='--', linewidth=0.25)
-    line_r, = ax.plot(t, r, drawstyle='steps', color="#338000") # drawstyle='steps'
-    line_y, = ax.plot(t, y, drawstyle='steps', color="#d40055")
+    line_r, = ax.plot(t, r, drawstyle='steps-post', color="#338000") # drawstyle='steps'
+    line_y, = ax.plot(t, y, drawstyle='steps-post', color="#d40055")
     ax.set_xlim(0, sampling_time * (total_points - 1))
     spany = high_val - low_val
     ax.set_ylim(max(0,low_val-0.9*spany), high_val + 0.95*spany)
@@ -650,10 +650,10 @@ if __name__ == "__main__":
     signal = [90, 0, -90]
     #stairs_closed(motor1, signal, 1)
     # #print(plant.transfer_function(output='velocity'))
-    set_pid(motor1, kp=0.01, ki=0.04, kd=0.0, N=1, beta=1.0)
-    sleep(3)
+    set_pid(motor1, kp=0.01, ki=0.03, kd=0.0, N=1, beta=1.0)
+    sleep(2)
 
-    step_closed(motor1, low_val=0, high_val=100, low_time=0, high_time=2)
+    step_closed(motor1, low_val=0, high_val=100, low_time=0, high_time=1)
     #signal = [30, 40, 50, 60, 70, 80]
     # set_pid(plant, kp = 16.796, ki = 5, kd = 16.441, N = 27.38, beta = 1)
     #step_open(plant, op_point=45, amplitude=5, high_time=200, stab_time=150, uee_time=20)

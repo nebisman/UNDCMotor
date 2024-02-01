@@ -562,7 +562,6 @@ float computeController(){
             X[i] = 0;
         }
         control = 0;
-        np = 0;
         reset_int = false;
     }
 
@@ -598,7 +597,9 @@ static void generalControlTask(void *pvParameters) {
 
         led_status = !led_status;
         digitalWrite(PIN_CLOCK, led_status);
-
+        if (reset_int) {
+            np = 0;
+        }
         //printf("working..\n");
         // reading the encoder
         y = encoderMotor.getCount() * pulses2degrees;
@@ -656,8 +657,9 @@ void setup() {
             &h_publishStateTask,
             CORE_COMM
     );
+    vTaskSuspend(h_publishStateTask);
 
-    // Create the task for PID control in core 0.
+    // Creating the task for PID control in core 0.
     xTaskCreatePinnedToCore(
             controlPidTask, // This is the control routine
             "PID control",
@@ -667,7 +669,8 @@ void setup() {
             &h_controlPidTask,
             CORE_CONTROL
     );
-    //vTaskSuspend(h_controlPidTask);
+
+    // Create the task for general control in core 0.
     xTaskCreatePinnedToCore(
             generalControlTask, // This is the control routine
             "general control",
@@ -678,9 +681,6 @@ void setup() {
             CORE_CONTROL
     );
     vTaskSuspend(h_generalControlTask);
-
-
-
     connectWiFi();
     initMqtt();
     connectMqtt();
