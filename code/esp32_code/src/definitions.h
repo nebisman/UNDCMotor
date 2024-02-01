@@ -43,11 +43,11 @@
 #define USER_SYS_SET_REF           "/motor/user/motor_" PLANT_NUMBER "/set_ref"             //2
 
 #define USER_SYS_STEP_CLOSED       "/motor/user/motor_" PLANT_NUMBER "/step_closed"         //3
-//#define USER_SYS_STAIRS_CLOSED     "/thermal/user/thermal_" PLANT_NUMBER "/stairs_closed"       //4
+#define USER_SYS_STAIRS_CLOSED    "/motor/user/motor_" PLANT_NUMBER "/stairs_closed"       //4
 //#define USER_SYS_PRBS_OPEN         "/thermal/user/thermal_" PLANT_NUMBER "/prbs_open"           //5
 //#define USER_SYS_STEP_OPEN         "/thermal/user/thermal_" PLANT_NUMBER "/step_open"           //6
 //#define USER_SYS_STEP_OPEN         "/thermal/user/thermal_" PLANT_NUMBER "/step_open"           //6
-//#define USER_SYS_SET_GENCON        "/thermal/user/thermal_" PLANT_NUMBER "/set_gencon"          //7
+#define USER_SYS_SET_GENCON        "/motor/user/motor_" PLANT_NUMBER "/set_gencon"          //7
 //
 // Integer definitions of topics to avoid comparison with strings, which is more expensive
 // in terms of computation
@@ -55,10 +55,10 @@
 #define USER_SYS_SET_PID_INT           1
 #define USER_SYS_SET_REF_INT           2
 #define USER_SYS_STEP_CLOSED_INT       3
-//#define USER_SYS_STAIRS_CLOSED_INT     4
+#define USER_SYS_STAIRS_CLOSED_INT     4
 //#define USER_SYS_PRBS_OPEN_INT         5
 //#define USER_SYS_STEP_OPEN_INT         6
-//#define USER_SYS_SET_GENCON_INT        7
+#define USER_SYS_SET_GENCON_INT        7
 //
 //// Codes for modes of control
 #define GENERAL_CONTROLLER             0

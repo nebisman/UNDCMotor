@@ -37,8 +37,7 @@ codes ={"SYS_USER_SIGNALS_CLOSED"  : "/motor/motor_" + PLANT_NUMBER + "/user/sig
         "BUFFER_SIZE" : 25,
         }
 
-
-class SystemIoT:
+class MotorSystemIoT:
 
     def __init__(self, broker_address = BROKER, port= PORT, client_id="", clean_session=True):
         self.client = mqtt.Client()
@@ -181,20 +180,18 @@ def set_pid(system, kp=1, ki=0.4, kd=0, N=5, beta=1):
 def step_closed(system, low_val=0, high_val=90, low_time=1, high_time=1, filepath ="DCmotor_step_closed_exp.csv"):
 
     def step_message(system, userdata, message):
-        # This inner funttion is the callback of the received messages
+        # This inner function is the callback of the received messages
         q.put(message)
 
-
-
-
-
-
-
-
+    # reading the configuration parameters from the
+    # dictionary of codes
     topic_pub = system.codes["USER_SYS_STEP_CLOSED"]
     topic_sub = system.codes["SYS_USER_SIGNALS_CLOSED"]
     sampling_time = system.codes["MOTOR_SAMPLING_TIME"]
     buffer = system.codes["BUFFER_SIZE"]
+
+    # setting the parameters of the step response for sending to ESP32
+
     points_high = round(high_time / sampling_time) + 1
     points_low = round(low_time / sampling_time)
     total_points = points_low + points_high
@@ -203,15 +200,21 @@ def step_closed(system, low_val=0, high_val=90, low_time=1, high_time=1, filepat
     points_high_hex = long2hex(points_high)
     low_val_hex = float2hex(low_val)
     high_val_hex = float2hex(high_val)
+
+    # command sent to ESP32 for obtaining the step response
+
     message = json.dumps({"low_val": low_val_hex,
                           "high_val": high_val_hex,
                           "points_low": points_low_hex,
                           "points_high": points_high_hex,
                           })
 
+    # setting the callback for receiving messages
     system.client.on_message = step_message
     system.connect()
     system.subscribe(topic_sub)
+
+    # sending the step_closed command through mqtt when config has been done
     system.publish(topic_pub, message)
 
     # vectors for storing the results and the experiment
@@ -221,7 +224,7 @@ def step_closed(system, low_val=0, high_val=90, low_time=1, high_time=1, filepat
     t = []
     exp = []
 
-    # graphic elements
+    # Setting the graphics configuration for visualizing the experiment
 
     fig, ax = plt.subplots()
     ax.grid(True);
@@ -231,12 +234,18 @@ def step_closed(system, low_val=0, high_val=90, low_time=1, high_time=1, filepat
     ax.set_xlim(0, sampling_time * (total_points - 1))
     spany = high_val - low_val
     ax.set_ylim(max(0,low_val-0.9*spany), high_val + 0.95*spany)
+    line_r.set_data(t, r)
+    line_y.set_data(t, y)
+    plt.draw()
 
+
+
+    # this is the queue of messages filled by the step_message callback
     q = Queue()
+
+    # at start we define a current frame of -1 indicating that no frame
+    # has already been received
     curr_frame = -1
-
-
-
     while curr_frame < frames:
         try:
             message = q.get(True, 20* buffer * sampling_time)
@@ -274,116 +283,121 @@ def step_closed(system, low_val=0, high_val=90, low_time=1, high_time=1, filepat
     return t, y, r, u
 
 
+def stairs_closed(system, stairs=[40, 50, 60], duration=100, filepath = "stairs_closed_exp.csv"):
+    def stairs_message(system, userdata, message):
+        q.put(message)
+
+    # reading the configuration parameters from the code's field in the plant
+
+    topic_pub = system.codes["USER_SYS_STAIRS_CLOSED"]
+    topic_sub = system.codes["SYS_USER_SIGNALS_CLOSED"]
+    sampling_time = system.codes["MOTOR_SAMPLING_TIME"]
+    buffer = system.codes["BUFFER_SIZE"]
+
+    # setting the parameters of the step response for sending to ESP32
+
+    points_stairs = len(stairs)
+    points_stairs_hex = long2hex(points_stairs)
+    signal_hex = signal2hex(stairs)
+    duration = math.ceil(duration / sampling_time)
+    duration_hex = long2hex(duration)
+    message = json.dumps({"signal": signal_hex, "duration": duration_hex,
+                          "points_stairs": points_stairs_hex})
+
+    # command sent to ESP32 for obtaining the step response
+    system.client.on_message = stairs_message
+
+    # connecting system
+    system.connect()
+
+    # topic received from ESP32
+    system.subscribe(topic_sub)
+
+    # command sent to ESP32 for obtaining the stairs response
+    system.publish(topic_pub, message)
 
 
+    total_points = points_stairs * duration - 1
+    frames = math.ceil(total_points / buffer)
 
 
+    # vectors for storing the results of the experiment
+    y = []
+    r = []
+    u = []
+    t = []
+    exp = []
+
+    # Setting the graphics configuration for visualizing the experiment
+
+    fig, ax = plt.subplots()
+    ax.grid(True);
+    ax.grid(color='gray', linestyle='--', linewidth=0.25)
+    line_r, = ax.plot(t, r, drawstyle='steps', color="#338000")  # drawstyle='steps'
+    line_y, = ax.plot(t, y, drawstyle='steps', color="#d40055")
+    ax.set_xlim(0, sampling_time * (total_points - 1))
+    min_val = npy.min(signal)
+    max_val = npy.max(signal)
+    spany = max_val - min_val
+    ax.set_ylim( min_val-0.1*abs(spany), max_val + 0.1* spany)
+    line_r.set_data(t, r)
+    line_y.set_data(t, y)
+    plt.draw()
+
+    # This is the queue of messages filled by the stair_message callback
+    q = Queue()
+
+    # At beginning we define a current frame of -1 indicating that no frame
+    # has already been received
+    curr_frame = -1
+
+    # looṕ for receivind dataframes from the ESP32
+    while curr_frame < frames:
+        try:
+            # we wait for 10 seconds for a new dataframe
+            message = q.get(True, 20 * buffer * sampling_time)
+        except:
+            # else we raise a communication error
+            raise TimeoutError("The connection has been lost. Please try again")
+
+        # decoding the message
+        decoded_message = str(message.payload.decode("utf-8"))
+        msg_dict = json.loads(decoded_message)
+        frame_hex = str(msg_dict["frame"])
+        curr_frame = hex2long(frame_hex)
+        rframe_hex = str(msg_dict["r"])
+        uframe_hex = str(msg_dict["u"])
+        yframe_hex = str(msg_dict["y"])
+        rframe = hexframe_to_array(rframe_hex)
+        uframe = hexframe_to_array(uframe_hex)
+        yframe = hexframe_to_array(yframe_hex)
+        tframe = sampling_time * (npy.arange(len(rframe)) + (curr_frame - 1) * buffer)
+
+        # we plot every single point received in each dataframe
+        # and save it in the matrix exp for storing in a csv file
+        for ind in range(len(rframe)):
+            #storing t, r, y, and u vectors
+            r.append(rframe[ind])
+            y.append(yframe[ind])
+            u.append(uframe[ind])
+            t.append(tframe[ind])
+            # storing the experiment
+            exp.append([tframe[ind], rframe[ind], yframe[ind], uframe[ind]])
+            line_r.set_data(t, r)
+            line_y.set_data(t, y)
+            # drawing a new point from the current dataframe
+            plt.draw()
+            plt.pause(sampling_time)
+    # Now, we save the results of the experiment in the provided filepath
+    npy.savetxt(filepath, exp, delimiter=",",
+                fmt="%0.8f", comments="", header='t,r,y,u')
+    # Now all is done, close the connection and close the figure.
+    system.disconnect()
+    plt.show()
+    return t, y, r, u
 
 
-#     #ax.set_ylim(20, high_val + 10)
-#     plt.grid()
-#     npc = 1
-#     exp = []
-#     while npc <= points:
-#         try:
-#             message = q.get(True, 20 * sampling_time)
-#         except:
-#             raise TimeoutError("The connection has been lost. Please try again")
-#
-#         decoded_message = str(message.payload.decode("utf-8"))
-#         msg_dict = json.loads(decoded_message)
-#         print(np, hex2float(msg_dict["r"]), hex2float(msg_dict["y"]))
-#         np_hex = str(msg_dict["np"])
-#         np = hex2long(np_hex)
-#
-#         if (np == npc) and (np >= 0):
-#             t_curr = (np - 1) * sampling_time
-#             t.append(t_curr)
-#             y_curr = hex2float(msg_dict["y"])
-#             y.append(y_curr)
-#             r_curr = hex2float(msg_dict["r"])
-#             r.append(r_curr)
-#             u_curr = hex2float(msg_dict["u"])
-#             u.append(u_curr)
-#             line_r.set_data(t, r)
-#             line_y.set_data(t, y)
-#             exp.append([t_curr, r_curr, y_curr, u_curr])
-#             plt.draw()
-#             plt.pause(0.1)
-#             npc += 1
 # #
-#     npy.savetxt(filepath, exp, delimiter=",",
-#                 fmt="%0.8f", comments="", header='t,r,y,u')
-#     system.disconnect()
-#     plt.show()
-#     print("Step response completed")
-#     return t, r, y, u
-#
-#
-# def stair_closed(system, stairs=[40, 50, 60], duration=100, filepath = "stair_closed_exp.csv"):
-#     def usersignal_message(system, userdata, message):
-#         q.put(message)
-#
-#     # accessing fields of system IoT
-#     sampling_time = system.codes["THERMAL_SAMPLING_TIME"]
-#     topic_pub = system.codes["USER_SYS_STAIRS_CLOSED"]
-#     topic_sub = system.codes["SYS_USER_SIGNALS_CLOSED"]
-#     points = len(stairs)
-#     points_hex = long2hex(points)
-#     signal_hex = signal2hex(stairs)
-#     duration_points = math.ceil(duration / sampling_time)
-#     duration_points_hex = long2hex(duration_points)
-#     message = json.dumps({"signal": signal_hex, "duration": duration_points_hex, "points": points_hex})
-#     system.client.on_message = usersignal_message
-#     system.connect()
-#     system.subscribe(topic_sub)
-#     system.publish(topic_pub, message)
-#     q = Queue()
-#     np = -1
-#     y = []
-#     r = []
-#     t = []
-#     u = []
-#     exp = []
-#     fig, ax = plt.subplots()
-#     line_r, = ax.plot(t, r, 'b-')
-#     line_y, = ax.plot(t, y, 'r-')
-#     ax.set_xlim(0, sampling_time * duration_points * points)
-#     ax.set_ylim(20, 100)
-#     plt.grid()
-#     npc = 1
-#     while npc <= duration_points * points - 1:
-#         try:
-#             message = q.get(True, 20 * sampling_time)
-#         except:
-#             raise TimeoutError("The connection has been lost. Please try again")
-#
-#         decoded_message = str(message.payload.decode("utf-8"))
-#         msg_dict = json.loads(decoded_message)
-#         np_hex = str(msg_dict["np"])
-#         np = hex2long(np_hex)
-#         print(np, hex2float(msg_dict["r"]), hex2float(msg_dict["y"]))
-#         if np == npc:
-#             t_curr = (np - 1) * sampling_time
-#             t.append(t_curr)
-#             y_curr = hex2float(msg_dict["y"])
-#             y.append(y_curr)
-#             r_curr = hex2float(msg_dict["r"])
-#             r.append(r_curr)
-#             u_curr = hex2float(msg_dict["u"])
-#             u.append(u_curr)
-#             line_r.set_data(t, r)
-#             line_y.set_data(t, y)
-#             exp.append([t_curr, r_curr, y_curr, u_curr])
-#             plt.draw()
-#             plt.pause(0.1)
-#             npc += 1
-#     npy.savetxt(filepath, exp, delimiter=",",
-#                 fmt="%0.8f", comments="", header='t,r,y,u')
-#     system.disconnect()
-#     plt.show()
-#     return t, y, r, u
-#
 #
 # def pbrs_open(system, op_point=50, peak_amp=5, stab_time=150, uee_time=20, divider=35, filepath = "prbs_open_exp.csv"):
 #     def pbrs_message(system, userdata, message):
@@ -581,47 +595,47 @@ def step_closed(system, low_val=0, high_val=90, low_time=1, high_time=1, filepat
 #     return t, u, y
 #
 #
-# def set_controller(system, controller):
-#     topic_pub = system.codes["USER_SYS_SET_GENCON"]
-#     sampling_time = system.codes["THERMAL_SAMPLING_TIME"]
-#     Cvecont = ct.tf2ss(controller)
-#     Cve = ct.c2d(Cvecont, sampling_time, method='tustin')
-#     Ac = Cve.A
-#     Bc = Cve.B
-#     Cc = Cve.C
-#     Dc = Cve.D
-#
-#     if (npy.size(Bc, axis=1)) == 1:
-#         B1 = []
-#         for row in Bc:
-#             for e in row:
-#                 B1.append([e, -e])
-#         Bc = npy.array(B1)
-#         Dc = npy.array([[Dc[0][0], -Dc[0][0]]])
-#     order = len(Ac)
-#     order_hex = long2hex(order)
-#     P = [(i + 1) * 1e-8 for i in range(order)]
-#     L = ct.place(npy.transpose(Ac), npy.transpose(Cc), P)
-#     L = npy.transpose(L)
-#     A = Ac - L * Cc
-#     B = Bc - L * Dc
-#     A_hex = matrix2hex(A)
-#     B_hex = matrix2hex(B)
-#     C_hex = matrix2hex(Cc)
-#     D_hex = matrix2hex(Dc)
-#     L_hex = matrix2hex(L)
-#     message = json.dumps({"order": order_hex,
-#                           "A": A_hex,
-#                           "B": B_hex,
-#                           "C": C_hex,
-#                           "D": D_hex,
-#                           "L": L_hex
-#                           })
-#     system.connect()
-#     system.publish(topic_pub, message)
-#     system.disconnect()
-#     rcode = True
-#     return rcode
+def set_controller(system, controller):
+    topic_pub = system.codes["USER_SYS_SET_GENCON"]
+    sampling_time = system.codes["MOTOR_SAMPLING_TIME"]
+    Cvecont = ct.tf2ss(controller)
+    Cve = ct.c2d(Cvecont, sampling_time, method='tustin')
+    A = Cve.A
+    B = Cve.B
+    Cc = Cve.C
+    D = Cve.D
+    order = len(A)
+    P = [(0.6 + 0.001*i) for i in range(order)]
+    L = ct.place(npy.transpose(A), npy.transpose(Cc), P)
+    L = npy.transpose(L)
+    Ac = A - L * Cc
+    Bc = B - L * D
+    if (npy.size(Bc, axis=1)) == 1:
+        B1 = []
+        for row in Bc:
+            for e in row:
+                B1.append([e, -e])
+        Bc = npy.array(B1)
+        Dc = npy.array([[D[0][0], -D[0][0]]])
+    A_hex = matrix2hex(Ac)
+    B_hex = matrix2hex(Bc)
+    C_hex = matrix2hex(Cc)
+    D_hex = matrix2hex(Dc)
+    L_hex = matrix2hex(L)
+    order_hex = long2hex(order)
+    message = json.dumps({"order": order_hex,
+                          "A": A_hex,
+                          "B": B_hex,
+                          "C": C_hex,
+                          "D": D_hex,
+                          "L": L_hex
+                          })
+
+    system.connect()
+    system.publish(topic_pub, message)
+    system.disconnect()
+    rcode = True
+    return rcode
 
 
 
@@ -632,12 +646,14 @@ def step_closed(system, low_val=0, high_val=90, low_time=1, high_time=1, filepat
 
 
 if __name__ == "__main__":
-    plant = SystemIoT()
-    #print(plant.transfer_function(output='velocity'))
-    set_pid(plant, kp=0.01, ki=0.06, kd=0.0, N=1, beta=1.0)
-    #sleep(3)
+    motor1 = MotorSystemIoT()
+    signal = [90, 0, -90]
+    #stairs_closed(motor1, signal, 1)
+    # #print(plant.transfer_function(output='velocity'))
+    set_pid(motor1, kp=0.01, ki=0.04, kd=0.0, N=1, beta=1.0)
+    sleep(3)
 
-    step_closed(plant, low_val=0, high_val=100, low_time=0, high_time=2.5)
+    step_closed(motor1, low_val=0, high_val=100, low_time=0, high_time=2)
     #signal = [30, 40, 50, 60, 70, 80]
     # set_pid(plant, kp = 16.796, ki = 5, kd = 16.441, N = 27.38, beta = 1)
     #step_open(plant, op_point=45, amplitude=5, high_time=200, stab_time=150, uee_time=20)
