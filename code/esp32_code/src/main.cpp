@@ -1,22 +1,26 @@
 #include "secrets.h"
 #include "definitions.h"
 #include <ESP32Encoder.h>
-//#include <OneWire.h>
-//#include <DallasTemperature.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include "WiFi.h"
-//#include <Adafruit_NeoPixel.h>
+#include <Adafruit_NeoPixel.h>
 
 
-// Defining encoder variables
+// Defining encoders
 ESP32Encoder encoderMotor;
+ESP32Encoder encoderPot;
+
+// Defining RGB  led for visualizing variables
+Adafruit_NeoPixel dispLed(NUMPIXELS, LIGHT_PIN, NEO_GRB); // connection to rgb leds that display temperature
+
 
 // Task handles for resuming and suspending  tasks
 TaskHandle_t h_controlPidTask;
 TaskHandle_t h_publishStateTask;
 TaskHandle_t h_generalControlTask;
-
+TaskHandle_t h_identifyTask;
+TaskHandle_t h_stepOpenTask;
 
 // PID control default parameters
 float kp = 0.026048;
@@ -25,7 +29,7 @@ float kd  =0.00074865;
 float N = 11.9052;
 float beta = 0.90423;
 float h = SAMPLING_TIME; //sampling time
-const float br = .9;
+const float br = 1/0.5;
 bool reset_int = false;
 
 
@@ -55,25 +59,26 @@ uint32_t points_high = 50;
 uint32_t points_low = 50;
 uint32_t np = 0;
 uint32_t total_time = 4294967295;
-//unsigned int uee_points= (unsigned int) (20/h);
-//unsigned int divider = 35;
-//unsigned int prbs_points =  63 * divider;
-//unsigned int stab_points = (unsigned int) (150/h);
+uint16_t divider = 1;
+
+
+
 
 
 // Parameters of a general controller for the thermal system
 uint8_t order;
-float A [10][10];   // Controller's A matrix
-float B [10][2];    // Controller's B matrix
-float C [10];       // Controller's C matrix
-float D [2];        // Controller's D matrix
-float L [10];       // L is the gain matrix for the antiwindup observer
+float A [10][10] = {0};   // Controller's A matrix
+float B [10][2] = {0};    // Controller's B matrix
+float C [10] = {0};       // Controller's C matrix
+float D [2] = {0};        // Controller's D matrix
+float L [10] = {0};       // L is the gain matrix for the antiwindup observer
 
 
 
-// Vectors of values and times for storing an the edges of
+// Vectors of values and times for storing  the edges of
 // an user's defined arbitrary signal
 float stairs[50];       //  Arbitrary signal
+uint32_t timeValues[50];
 
 
 //Integer code of the command sent by the user
@@ -133,8 +138,18 @@ void hexStringToFloatArray(float* floatArray, const char* hexString, unsigned in
         sscanf(hexString + i * 8, "%8x", &temp); // Read 8 hex digits (32 bits)
         memcpy(floatArray + i, &temp, sizeof(float)); // Copy bits into float
     }
-
 }
+
+void hexStringToLongArray(uint32_t *longArray, const char* hexString, unsigned int numLongs) {
+    // This function translates a user-sent hexadecimal string into an array of floats, enabling the transmission
+    // of arbitrary signals and parameters of a controller in a state space form.
+    for (unsigned int  i = 0; i < numLongs; ++i) {
+        uint32_t  temp;
+        sscanf(hexString + i * 8, "%8x", &temp); // Read 8 hex digits (32 bits)
+        memcpy(longArray + i, &temp, sizeof(uint32_t)); // Copy bits into float
+    }
+}
+
 
 void hexStringToMatrix(float* matrix, const char* hexString, unsigned int order, unsigned int cols, unsigned int maxcols) {
     // This function translates a user-sent hexadecimal string into a matrix of floats, enabling the transmission
@@ -160,6 +175,20 @@ String arrayToString(float * array, uint framesize){
     return arrayHex;
 }
 
+float linearInterpolation(uint32_t t[], float r[], uint16_t n, uint32_t t_interp) {
+    uint16_t i;
+    float result;
+    float r1;
+
+    for (i = 0; i < n - 1; i++) {
+        if (t[i] <= t_interp && t_interp <= t[i + 1]) {
+            // Linear interpolation formula: y = y1 + (y2 - y1) * ((x - x1) / (x2 - x1))
+            r1 = (float) ( t_interp -  t[i]) / (t[i + 1] - t[i]);
+            result = r[i] + (r[i + 1] - r[i]) *  r1;
+        }
+    }
+    return result;
+}
 
 void voltsToMotor( float volts){
     // This function convert a voltage value given in variable volts
@@ -181,12 +210,86 @@ void voltsToMotor( float volts){
     }
 }
 
+
+void sensorToColormap(float x, uint8_t * rgbval) {
+    // This function calculates the R, G, and B values of a fifth-degree polynomial approximation of the turbo colormap.
+    // It is the colormap displayed by the WS2812 LEDs connected to the thermal plant.
+    // The resulting colormap enables the user to visualize both the plant's temperature and the controller's actions.
+    // The input 'x' represents a normalized value within the [0, 1] range, corresponding to the analog variable visualized by the LEDs.
+    // The input 'rgbval' is a 3-element array designed to store the computed RGB values.
+
+    float r;
+    float g;
+    float b;
+    // colormap turbo
+    r = 0.1357 + x * ( 4.5974 - x * ( 42.3277 - x * ( 130.5887 - x * ( 150.5666 - x * 58.1375 ))));
+    g = 0.0914 + x * ( 2.1856 + x * ( 4.8052 - x * ( 14.0195 - x * ( 4.2109 + x * 2.7747 ))));
+    b = 0.1067 + x * ( 12.5925 - x * ( 60.1097 - x * ( 109.0745 - x * ( 88.5066 - x * 26.8183 ))));
+
+
+    r = constrain(r,0,1);
+    g = constrain(g,0,1);
+    b = constrain(b,0,1);
+
+    rgbval[0] = (uint8_t) 255*r;
+    rgbval[1] = (uint8_t) 255*g;
+    rgbval[2] = (uint8_t) 255*b;
+    rgbval[0] = pgm_read_byte(&gamma8[rgbval[0]]);
+    rgbval[1] = pgm_read_byte(&gamma8[rgbval[1]]);
+    rgbval[2] = pgm_read_byte(&gamma8[rgbval[2]]);
+}
+
+void displayLed(float var, float valmin, float valmax, float percent, uint8_t  led){
+    // This function takes an analog variable and visualizes it as a colormap using the "sensorToColormap" function.
+    // The 'var' parameter represents the analog variable, while 'valmin', 'valmax', and 'percent' serve as adjustment
+    // parameters to scale the colormap.
+    // The 'led' parameter, with values 0 or 1, denotes each of the LEDs attached to the plant.
+    uint8_t rgb[3];
+    float change;
+    float x;
+    float valmin_b;
+
+    float valmax_b;
+    float start = 0.025;
+    change = valmax - valmin;
+    valmin_b = valmin - percent * change;
+    valmax_b = valmax + percent * change;
+    x = start + constrain((1-start)* (var - valmin_b)/(valmax_b-valmin_b), 0, 1-start);
+    sensorToColormap( x,  rgb);
+    uint32_t color = dispLed.Color(rgb[0], rgb[1], rgb[2]);
+    dispLed.setPixelColor(led, color );
+    dispLed.show();
+}
+
+// This function suspend all  controlling tasks
 void suspendAllTasks(){
     vTaskSuspend(h_publishStateTask);
     vTaskSuspend(h_generalControlTask);
     vTaskSuspend(h_controlPidTask);
+    vTaskSuspend(h_identifyTask);
+    vTaskSuspend(h_stepOpenTask);
     voltsToMotor(0);
 }
+
+// This function activate the default controllet
+void defaultControl(){
+    codeTopic = DEFAULT_TOPIC;
+    encoderMotor.setCount(0);
+    encoderPot.setCount(0);
+    if (typeControl == PID_CONTROLLER){
+        vTaskSuspend(h_generalControlTask);
+        vTaskResume(h_controlPidTask);
+    }
+    else if (typeControl == GENERAL_CONTROLLER){
+        vTaskSuspend(h_controlPidTask);
+        vTaskResume(h_generalControlTask);
+    }
+    vTaskSuspend(h_publishStateTask);
+    vTaskSuspend(h_identifyTask);
+    vTaskSuspend(h_stepOpenTask);
+}
+
+
 
 // These functions handle the WiFi and mqtt communication
 
@@ -203,10 +306,10 @@ void connectMqtt()
         mqttClient.subscribe(USER_SYS_SET_REF);
         mqttClient.subscribe(USER_SYS_STEP_CLOSED);
         mqttClient.subscribe(USER_SYS_STAIRS_CLOSED);
-       // mqttClient.subscribe(USER_SYS_STEP_OPEN);
-//        mqttClient.subscribe(USER_SYS_PRBS_OPEN);
-//        mqttClient.subscribe(USER_SYS_SET_GENCON);
-        printf("connected to broker\n");
+        mqttClient.subscribe(USER_SYS_PRBS_OPEN);
+        mqttClient.subscribe(USER_SYS_STEP_OPEN);
+        mqttClient.subscribe(USER_SYS_PROFILE_CLOSED);
+        printf("now connected to broker!\n");
     }
     else
     {
@@ -214,11 +317,12 @@ void connectMqtt()
     }
 }
 void connectWiFi(){
+    WiFi.disconnect(true);
     WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     while (WiFi.status() != WL_CONNECTED) {
         Serial.print(".");
-        vTaskDelay(pdMS_TO_TICKS(500));
+        vTaskDelay(pdMS_TO_TICKS(250));
     }
     printf("\n");
     printf("Connected to WIFI through IP: %s \n", WiFi.localIP().toString());
@@ -246,7 +350,6 @@ void IRAM_ATTR onMqttReceived(char* lastTopic, byte* lastPayload, unsigned int l
     suspendAllTasks();
     JsonDocument doc;
     if (strstr(lastTopic, USER_SYS_SET_PID)) {
-        codeTopic = USER_SYS_SET_PID_INT;
         typeControl = PID_CONTROLLER;
         deserializeJson(doc, lastPayload);
         kp = hex2Float((const char *) doc["kp"]);
@@ -255,13 +358,11 @@ void IRAM_ATTR onMqttReceived(char* lastTopic, byte* lastPayload, unsigned int l
         N = hex2Float((const char *) doc["N"]);
         reset_int = true;
         beta = hex2Float((const char *) doc["beta"]);
-        vTaskResume(h_controlPidTask);
-        printf("PID parameters settled:\n\tkp=%0.3f\n\tki=%0.3f\n\tkd=%0.3f\n\tN=%0.3f\n\tBeta=%0.3f\n",
+        printf("PID parameters settled:\n    kp=%0.3f\n    ki=%0.3f\n    kd=%0.3f\n    N=%0.3f\n    Beta=%0.3f\n",
                kp, ki, kd, N, beta);
+        defaultControl();
     }
     else if(strstr(lastTopic, USER_SYS_SET_GENCON)){
-        codeTopic = USER_SYS_SET_GENCON_INT;
-        typeControl = GENERAL_CONTROLLER;
         deserializeJson(doc, lastPayload);
         order = hex2Long((const char *) doc["order"]);
         const char *hex_A = doc["A"];
@@ -274,49 +375,44 @@ void IRAM_ATTR onMqttReceived(char* lastTopic, byte* lastPayload, unsigned int l
         hexStringToFloatArray(C, hex_C, order);
         hexStringToFloatArray(D, hex_D, 2);
         hexStringToFloatArray(L, hex_L, order);
+        typeControl = GENERAL_CONTROLLER;
         reset_int = true;
         printf("A general controller or order %d has been loaded\n", order);
         printf("A=\n");
         for ( uint8_t  i =0; i < order; i++ ){
             for (size_t j =0; j < order; j++ ) {
-                printf("%0.4f\t", A[i][j]);
+                printf("%0.4f    ", A[i][j]);
             }
             printf("\n");
         }
         printf("B=\n");
         for (uint8_t  i =0; i < order; i++ ) {
             for (size_t j =0; j < 2; j++ ) {
-                printf("%0.4f\t", B[i][j]);
+                printf("%0.4f    ", B[i][j]);
             }
             printf("\n");
         }
         printf("C=\n");
         for (uint8_t  j =0; j < order; j++ ) {
-            printf("%0.4f\t", C[j]);
+            printf("%0.4f    ", C[j]);
         }
         printf("\n");
         printf("D = %0.4f   %0.4f \n", D[0], D[1]);
         printf("L=\n");
         for (uint8_t  j =0; j < order; j++ ) {
-            printf("%0.4f\t", L[j]);
+            printf("%0.4f    ", L[j]);
         }
         printf("\n");
-        vTaskResume(h_generalControlTask);
+        defaultControl();
     }
 
     else if (strstr(lastTopic, USER_SYS_SET_REF)) {
-        codeTopic = USER_SYS_SET_REF_INT;
+        //codeTopic = USER_SYS_SET_REF_INT;
         deserializeJson(doc, lastPayload);
         reference = hex2Float((const char *) doc["reference"]);
         reset_int = true;
         printf("Reference has been set to %0.2f degrees \n", reference);
-        if(typeControl == PID_CONTROLLER) {
-            vTaskResume(h_controlPidTask);
-        }
-        else if (typeControl == GENERAL_CONTROLLER) {
-            vTaskResume(h_generalControlTask);
-        }
-
+        defaultControl();
     }
     else if (strstr(lastTopic, USER_SYS_STEP_CLOSED )) {
         codeTopic = USER_SYS_STEP_CLOSED_INT;
@@ -328,7 +424,7 @@ void IRAM_ATTR onMqttReceived(char* lastTopic, byte* lastPayload, unsigned int l
         total_time = points_low + points_high;
         reset_int = true;
         printf("Closed loop step response:\n");
-        printf("\tlow value=%0.2f\n\thigh value=%0.2f\n\ttime in high =%0.2f\n\ttime in low=%0.2f\n", low_val,
+        printf("    low value=%0.2f\n    high value=%0.2f\n    time in high =%0.2f\n    time in low=%0.2f\n", low_val,
                high_val, (float) (points_high * h), (float) (points_low * h));
         if (typeControl == PID_CONTROLLER) {
             vTaskResume(h_publishStateTask);
@@ -343,6 +439,8 @@ void IRAM_ATTR onMqttReceived(char* lastTopic, byte* lastPayload, unsigned int l
     else if (strstr(lastTopic, USER_SYS_STAIRS_CLOSED)){
         codeTopic = USER_SYS_STAIRS_CLOSED_INT;
         deserializeJson(doc, lastPayload);
+        low_val = hex2Float((const char *) doc["min_val"]);
+        high_val = hex2Float((const char *) doc["max_val"]);
         points_stairs = hex2Long((const char *) doc["points_stairs"]);
         duration = hex2Long((const char *) doc["duration"]);
         const char *hexSignal = doc["signal"];
@@ -351,15 +449,83 @@ void IRAM_ATTR onMqttReceived(char* lastTopic, byte* lastPayload, unsigned int l
         reset_int = true;
         printf("Stairs signal of %d steps  with a duration of %0.2f secs.\n", points_stairs, h * total_time);
         if(typeControl == PID_CONTROLLER) {
+            vTaskResume(h_publishStateTask);
             vTaskResume(h_controlPidTask);
         }
-//            else if (typeControl == GENERAL_CONTROLLER) {
-//                vTaskSuspend(h_controlPidTask);
-//                vTaskResume(h_generalControlTask);
-//            }
+        else if (typeControl == GENERAL_CONTROLLER) {
+           vTaskResume(h_publishStateTask);
+           vTaskResume(h_generalControlTask);
+        }
+    }
+
+    else if(strstr(lastTopic, USER_SYS_PRBS_OPEN )) {
+        codeTopic = USER_SYS_PRBS_OPEN_INT;
+        deserializeJson(doc, lastPayload);
+        low_val  = hex2Float((const char *) doc["low_val"]);
+        high_val = hex2Float((const char *) doc["high_val"]);
+        divider = hex2Long((const char *) doc["divider"]);
+        total_time = PRBS_LENGTH * divider;
+        reset_int = true;
+        printf("Open loop test with a prbs signal with %d steps with a duration of %0.2f secs.\n",
+               total_time, (total_time-1) * h);
+        vTaskResume(h_publishStateTask);
+        vTaskResume(h_identifyTask);
+    }
+    else if(strstr(lastTopic, USER_SYS_STEP_OPEN )){
+        codeTopic = USER_SYS_STEP_CLOSED_INT;
+        deserializeJson(doc, lastPayload);
+        low_val = hex2Float((const char *) doc["low_val"]);
+        high_val = hex2Float((const char *) doc["high_val"]);
+        points_high = hex2Long((const char *) doc["points_high"]);
+        points_low = hex2Long((const char *) doc["points_low"]);
+        total_time = points_low + points_high;
+        reset_int = true;
+        printf("Open loop step response:\n");
+        printf("    low value=%0.2f\n    high value=%0.2f\n    time in high=%0.2f\n    time in low=%0.2f\n", low_val,
+               high_val, (float) (points_high * h), (float) (points_low * h));
+        vTaskResume(h_publishStateTask);
+        vTaskResume(h_stepOpenTask);
+    }
+
+    else if(strstr(lastTopic, USER_SYS_PROFILE_CLOSED)){
+        codeTopic = USER_SYS_PROFILE_CLOSED_INT;
+        deserializeJson(doc, lastPayload);
+        points_stairs = hex2Long((const char *) doc["points"]);
+        low_val = hex2Float((const char *) doc["min_val"]);
+        high_val = hex2Float((const char *) doc["max_val"]);
+        const char *timeValuesHex = doc["timevalues"];
+        const char *stairsHex = doc["refvalues"];
+        hexStringToFloatArray(stairs, stairsHex, points_stairs);
+        hexStringToLongArray(timeValues, timeValuesHex, points_stairs);
+        total_time = timeValues[points_stairs - 1];
+        reset_int = true;
+        printf("Closed loop profile response with a duration of %0.2f secs.\n", total_time * h);
+        printf("   refvalues = [ ");
+        for (uint8_t  j =0; j < points_stairs; j++ ) {
+            printf("%0.2f ", stairs[j]);
+        }
+        printf("]\n");
+        printf("   timevalues = [ ");
+        for (uint8_t  j =0; j < points_stairs; j++ ) {
+            printf("%0.2f ", timeValues[j] * h);
+        }
+        printf("]\n");
+
+        if(typeControl == PID_CONTROLLER) {
+            vTaskResume(h_publishStateTask);
+            vTaskResume(h_controlPidTask);
+        }
+        else if (typeControl == GENERAL_CONTROLLER) {
+            vTaskResume(h_publishStateTask);
+            vTaskResume(h_generalControlTask);
+        }
 
 
     }
+
+
+
+
 }
 
 
@@ -380,41 +546,77 @@ void publishStateClosed(uint indexFrame, uint currFrame) {
     mqttClient.publish(SYS_USER_SIGNALS_CLOSED, jsonBuffer);
 }
 
+void publishStateOpen(uint indexFrame, uint currFrame) {
+    JsonDocument doc;
+    char jsonBuffer[BUFFER_SIZE * 21];
+    doc["u"] = arrayToString(uBuffer, indexFrame+1);
+    doc["y"] = arrayToString(yBuffer, indexFrame+1);
+    doc["frame"] = long2Hex(currFrame);
+    serializeJson(doc, jsonBuffer); // print to client
+    mqttClient.publish(SYS_USER_SIGNALS_OPEN, jsonBuffer);
+}
+
 static void publishStateTask (void *pvParameters) {
     // local constants
     uint32_t rv;
     uint16_t  indexFrame;
     uint16_t currFrame;
-//    uint32_t t0;
-//    uint32_t t1;
 
     for (;;) {
         xTaskNotifyWait(0, 0b0011, &rv, portMAX_DELAY);
         if (rv & 0b0001) {
             if (np <= total_time) {
-                indexFrame = (np-1) % BUFFER_SIZE;
-                currFrame = (np-1)/BUFFER_SIZE + 1;
+                indexFrame = np % BUFFER_SIZE;
+                currFrame = np/BUFFER_SIZE + 1;
                 rBuffer[indexFrame] = reference;
                 uBuffer[indexFrame] = usat;
                 yBuffer[indexFrame] = y;
                 if (indexFrame == BUFFER_SIZE - 1) {
-                    //t0 = micros();
                     publishStateClosed(indexFrame, currFrame);
-                   // t1 = micros();
-                    //printf("elapsed= %d\n ", t1-t0);
-                } else if (np == total_time) {
-                   // t0 = micros();
+                  }
+                else if (np == total_time) {
                     publishStateClosed(indexFrame, currFrame);
-                   // t1 = micros();
-                    //printf("elapsed= %d\n ", t1-t0);
-                }
+                  }
 
             }
         }
+        else if  ( rv & 0b0010 ){
+            if (np <= total_time) {
+                indexFrame = np % BUFFER_SIZE;
+                currFrame = np / BUFFER_SIZE + 1;
+                uBuffer[indexFrame] = u;
+                yBuffer[indexFrame] = y;
+                if (indexFrame == BUFFER_SIZE - 1) {
+                    publishStateOpen(indexFrame, currFrame);
+                }
+                else if (np == total_time) {
+                    publishStateOpen(indexFrame, currFrame);
+                }
+
+            }
+
+        }
+
     }
 }
 
-
+//float firFilter(float input) {
+//    static float buffer[ORDER_FIR] = {0}; // Static buffer to store previous input samples
+//    static int index = 0; // Index for circular buffer
+//    float output = 0;
+//
+//    // Update buffer with the new input sample
+//    buffer[index] = input;
+//
+//    // Apply the FIR filter
+//    for (int i = 0; i < ORDER_FIR; i++) {
+//        output += firCoeffs[i] * buffer[(index + ORDER_FIR - i) % ORDER_FIR];
+//    }
+//
+//    // Update the buffer index for the next sample
+//    index = (index + 1) % ORDER_FIR;
+//    return output;
+//}
 
 float compDeadZone(float var, float offset, float zm){
     // This function compensates the dead zone of DC motor
@@ -436,41 +638,52 @@ void computeReference() {
     switch (codeTopic) {
 
         case DEFAULT_TOPIC:
-            reference = DEFAULT_REFERENCE;
-            vTaskSuspend(h_publishStateTask);
+            reference = encoderPot.getCount() * 4.5;
+            displayLed(u, -5, 5, 0, 6);
             break;
         case USER_SYS_STEP_CLOSED_INT:
             if (np < points_low) {
                 reference = low_val;
-
+                // sending the indication for publishing
+                xTaskNotify(h_publishStateTask, 0b0001, eSetBits);
+                displayLed(y, low_val, high_val, 0.5, 6);
             }
             else if (np <= total_time) {
                 reference = high_val;
+                // sending the indication for publishing
+                xTaskNotify(h_publishStateTask, 0b0001, eSetBits);
+                displayLed(y, low_val, high_val, 0.5, 6);
             }
             else if (np == total_time + 1){
-                voltsToMotor( 0);
-                codeTopic = DEFAULT_TOPIC;
-                //typeControl = PID_CONTROLLER;
                 printf("Closed loop step response completed\n");
-                //vTaskSuspend(h_controlPidTask);
-                //vTaskSuspend(h_generalControlTask);
+                defaultControl();
             }
-            np += 1;
             break;
-//
+
         case USER_SYS_STAIRS_CLOSED_INT:
             if (np <= total_time) {
                 reference = stairs[np / duration];
+                // sending the indication for publishing
+                xTaskNotify(h_publishStateTask, 0b0001, eSetBits);
+                displayLed(y, low_val, high_val, 0, 6);
+
             }
             else if (np == total_time + 1) {
-                voltsToMotor( 0);
-                codeTopic = DEFAULT_TOPIC;
-                //typeControl = PID_CONTROLLER;
                 printf("Stairs closed loop response completed\n");
-                //vTaskSuspend(h_controlPidTask);
-                //vTaskSuspend(h_generalControlTask);
+                defaultControl();
             }
-            np += 1;
+            break;
+
+        case USER_SYS_PROFILE_CLOSED_INT:
+            if (np <= total_time) {
+                reference = linearInterpolation(timeValues, stairs, points_stairs, np);
+                displayLed(y, low_val, high_val, 0, 6);
+                xTaskNotify(h_publishStateTask, 0b0001, eSetBits);
+            }
+            else if (np == total_time + 1) {
+                printf("Closed loop profile response completed\n");
+                defaultControl();
+            }
             break;
 
     }
@@ -482,7 +695,7 @@ void computeReference() {
 
 static void controlPidTask(void *pvParameters) {
     /* this function computes a two parameter PID control with Antiwindup
-     See Astrom
+     See Astrom ans Murray
     */
     static bool led_status = false;
     const TickType_t taskPeriod = (pdMS_TO_TICKS(1000*h));
@@ -492,54 +705,53 @@ static void controlPidTask(void *pvParameters) {
     float bd;      //scale derivative constant 2
     float P;       //  proportional action
     float D;       //  derivative action
-    float e;       //  current error r[n] - y [n]
+
+    /** state variables for the PID */
     static float y_ant = 0;      //  past output
     static float I = 0;          // Integral action
+//    float ef;
+
     for (;;) {
         TickType_t xLastWakeTime = xTaskGetTickCount();
-        led_status = !led_status;
-        digitalWrite(PIN_CLOCK, led_status);
-
         // at start we reset the integral action and the state variables
         // when receiving a new command
         if (reset_int) {
-            I = 0;
             np = 0;
+            encoderMotor.clearCount();
+            encoderPot.clearCount();
             reset_int = false;
+            continue;
         }
         // reading the encoder
         y = encoderMotor.getCount() * pulses2degrees;
         // computing the current reference depending of the current command
         computeReference();
         // updating error
-        e = reference - y;
-        // updating controller parameters
-        bi = ki*h;         // integral action scaled to sampling time
-        // filtered derivative constantd
+
+        /** updating controller parameters if they changed */
+        // integral action scaled to sampling time
+        bi = ki*h;
+        // filtered derivative constant
         ad = kd/(N*(kd/N + h));
         bd = kd/(kd/N + h);
         P = kp*(beta * reference - y); // proportional actions
         D =  ad*D - bd*(y - y_ant); // derivative action
         u = P + I + D ; // control signal
-        // Compensation of dead zone for the DC motor
-        u  = compDeadZone(u, .4, 0.05);
 
+        // Compensation of dead zone for the DC motor
+        u  = compDeadZone(u, .35, 0.04);
         //saturated control signal
         usat = constrain(u, -5, 5);
-
         // sending the control signal to motor
         voltsToMotor(usat);
-
         // updating integral action
         I = I + bi *(reference - y) + br*(usat - u);
-
         // updating output
         y_ant = y;
-        // sending the indication for publishing
-        xTaskNotify(h_publishStateTask, 0b0001, eSetBits);
 
         //The task is suspended while awaiting a new samplig time
         vTaskDelayUntil(&xLastWakeTime, taskPeriod);
+        np +=1;
     }
 }
 
@@ -553,8 +765,8 @@ float computeController(){
        of the thermal system
     */
 
-    static float X[10] = {0,0,0,0,0,0,0,0,0,0};
-    float Xnew[10] = {0,0,0,0,0,0,0,0,0,0};
+    static float X[10] = {0};
+    float Xnew[10] = {0};
     static float control = 0;
 
     if (reset_int) {
@@ -585,46 +797,132 @@ float computeController(){
 
 static void generalControlTask(void *pvParameters) {
     //this pin is only for vizualizing the correct timing of the control routine
-    static bool led_status = false;
     // Set the sampling time for the task at h=0.02 ms
     const TickType_t taskPeriod = (pdMS_TO_TICKS(1000*h));
-    float deadzone = 0.4;
+
 
     for (;;) {
         TickType_t xLastWakeTime = xTaskGetTickCount();
-
-        // this pin is only for vizualizing the correct timing of the control routine
-
-        led_status = !led_status;
-        digitalWrite(PIN_CLOCK, led_status);
         if (reset_int) {
+            encoderMotor.clearCount();
+            encoderPot.clearCount();
             np = 0;
         }
-        //printf("working..\n");
         // reading the encoder
         y = encoderMotor.getCount() * pulses2degrees;
 
         // computing the current reference depending of the current command
         computeReference();
 
-        //
-         u = computeController();
+        // computing the general controlled
+        u = computeController();
         // Compensation of dead zone for the DC motor
-
-        u  = compDeadZone(u, 0.4, 0.05);
-
+        u  = compDeadZone(u, .35, 0.04);
         //saturated control signal
         usat = constrain(u, -5, 5);
 
+
         // sending the control signal to motor
         voltsToMotor(usat);
-
-        // sending the indication for publishing
-        xTaskNotify(h_publishStateTask, 0b0001, eSetBits);
-
-        //printf("entre ref = %0.2f    y = %0.2f    u=%0.2f \n", reference, y, usat);
         //The task is suspended while awaiting a new sampling time
         vTaskDelayUntil(&xLastWakeTime, taskPeriod);
+        np +=1;
+    }
+}
+
+
+
+
+static void identifyTask(void *pvParameters) {
+/*  This task involves identifying the DC motor using
+ *  a PRBS signal stored in the prbsSignal array.
+ *  */
+
+const TickType_t taskPeriod = (uint32_t) (1000 * h);
+    uint byteIndex = 0;
+    uint bitShift;
+    bool  currBit;
+
+    for (;;) {
+        TickType_t xLastWakeTime = xTaskGetTickCount();
+
+        if (reset_int){
+            voltsToMotor((low_val + high_val) / 2);
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            reset_int = false;
+            np = 0;
+            encoderMotor.clearCount();
+            vTaskDelay(pdMS_TO_TICKS(1000*h));
+            continue;
+        }
+
+        if (np <= total_time) {
+            y = encoderMotor.getCount() * pulses2degrees /h;
+            encoderMotor.clearCount();
+            byteIndex =  (np / (32 * divider));
+            bitShift = 31 - ((np/divider) % 32);
+            currBit = (pbrsSignal[byteIndex] >> bitShift) & 1;
+            if (currBit) {
+                u = high_val;
+            } else {
+                u = low_val;
+            }
+            voltsToMotor(u);
+            xTaskNotify(h_publishStateTask, 0b0010, eSetBits);
+            displayLed(u, low_val, high_val, 0.6, 6);
+
+        }
+        else if (np == total_time + 1) {
+            voltsToMotor(0);
+            printf("Open loop PBRS response completed\n");
+            defaultControl();
+        }
+        vTaskDelayUntil(&xLastWakeTime, taskPeriod);
+        np +=1;
+    }
+}
+
+
+
+static void stepOpenTask(void *pvParameters) {
+/*  This task returns the velocity step response
+ *  of the  DC motor
+ *  */
+    const TickType_t taskPeriod = (uint32_t) (1000 * h);
+    for (;;) {
+        TickType_t xLastWakeTime = xTaskGetTickCount();
+        if (reset_int){
+            //this allow to set steady state for the low step
+            voltsToMotor(low_val);
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            reset_int = false;
+            np = 0;
+            encoderMotor.clearCount();
+            vTaskDelay(pdMS_TO_TICKS(1000*h));
+            continue;
+        }
+        //currPosition = encoderMotor.getCount() * pulses2degrees;
+        y = encoderMotor.getCount() * pulses2degrees/ h;
+        encoderMotor.clearCount();
+        //lastPosition = currPosition;
+        if (np < points_low) {
+            u = low_val;
+            voltsToMotor(u);
+            xTaskNotify(h_publishStateTask, 0b0010, eSetBits);
+        }
+        else if (np <= total_time) {
+            u  = high_val;
+            voltsToMotor(u);
+            xTaskNotify(h_publishStateTask, 0b0010, eSetBits);
+        }
+        else if (np == total_time + 1){
+            voltsToMotor( 0);
+            printf("Open loop step response completed\n");
+            defaultControl();
+
+        }
+        vTaskDelayUntil(&xLastWakeTime, taskPeriod);
+        np +=1;
     }
 }
 
@@ -632,8 +930,7 @@ static void generalControlTask(void *pvParameters) {
 void setup() {
     //Setting the maximal priority for setup
     vTaskPrioritySet(nullptr,24);
-    //This pin is for testing the timing of real time control routines
-    pinMode(PIN_CLOCK , OUTPUT);
+
     //setting the pwm channels
     ledcSetup(CH_PWM_AIN1  ,  FREQUENCY_PWM, RESOLUTION_PWM);
     ledcSetup(CH_PWM_AIN2  ,  FREQUENCY_PWM, RESOLUTION_PWM);
@@ -643,9 +940,22 @@ void setup() {
     //open the serial port for revising the borad messages
     Serial.begin(115200);
     //setting the encoders
-    encoderMotor.attachFullQuad (CH_ENC_B, CH_ENC_A);
+    encoderMotor.attachFullQuad (CH_ENC_A, CH_ENC_B);
     encoderMotor.setCount(0);
 
+
+   // Setting the potentiometer for setting reference
+
+    pinMode(CH_ENC_A_POT , PULLUP);
+    pinMode(CH_ENC_A_POT , PULLUP);
+    encoderPot.attachFullQuad(CH_ENC_A_POT, CH_ENC_B_POT);
+    encoderPot.setFilter(100);
+
+   // setting rgb led
+    dispLed.begin();
+    dispLed.clear();
+    dispLed.show();
+    dispLed.setBrightness(127);
 
     //create the task for communication in core 1
     xTaskCreatePinnedToCore(
@@ -670,6 +980,20 @@ void setup() {
             CORE_CONTROL
     );
 
+
+    connectWiFi();
+    initMqtt();
+    connectMqtt();
+    xTaskCreatePinnedToCore(
+            handleConnections, // This is communication task
+            "handle connections",
+            4096,
+            nullptr,
+            10,
+            nullptr,
+            CORE_COMM // communications are attached to core 1
+    );
+
     // Create the task for general control in core 0.
     xTaskCreatePinnedToCore(
             generalControlTask, // This is the control routine
@@ -681,18 +1005,28 @@ void setup() {
             CORE_CONTROL
     );
     vTaskSuspend(h_generalControlTask);
-    connectWiFi();
-    initMqtt();
-    connectMqtt();
+
     xTaskCreatePinnedToCore(
-            handleConnections, // This is communication task
-            "handle connections",
+            identifyTask,
+            "prbs-ident",
             4096,
-            nullptr,
-            2,
-            nullptr,
-            CORE_COMM // communications are attached to core 1
+            NULL,
+            20,
+            &h_identifyTask,
+            CORE_CONTROL
     );
+    vTaskSuspend(h_identifyTask);
+
+    xTaskCreatePinnedToCore(
+            stepOpenTask,
+            "step-open",
+            4096,
+            NULL,
+            20,
+            &h_stepOpenTask,
+            CORE_CONTROL
+    );
+    vTaskSuspend(h_stepOpenTask);
 
 
 
@@ -705,12 +1039,8 @@ void setup() {
 
 void loop() {
     vTaskDelete(nullptr);
-    vTaskDelay(1000);
-    //printf("PID parameters settled:\n\tkp=%0.3f\n\tki=%0.3f\n\tkd=%0.3f\n\tN=%0.3f\n\tBeta=%0.3f\n",
-//    //       kp, ki, kd, N, beta);
-//    vTaskDelay(1000);
-     printf("%s\n", USER_SYS_STAIRS_CLOSED);
-//    //Serial.println(USER_SYS_STEP_CLOSED);
-//
 
-};
+//    h = encoderPot.getCount();
+//       printf("y= %0.2f\n    ref =%0.2f", y, reference);
+//       vTaskDelay(500);
+}
