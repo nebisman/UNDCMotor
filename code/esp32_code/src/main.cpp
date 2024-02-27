@@ -5,6 +5,9 @@
 #include <ArduinoJson.h>
 #include "WiFi.h"
 #include <Adafruit_NeoPixel.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+
 
 
 // Defining encoders
