@@ -15,8 +15,10 @@ matplotlib.use("TkAgg", force=True)
 
 # parameters of communication
 
-
-BROKER = "192.168.0.3"
+#BROKER = "broker.hivemq.com"
+BROKER = "192.168.0.10"
+#BROKER = "18.204.70.207" # amazon mosquitto broker
+# const char BROKER[] = "192.168.0.10";
 PORT = 1883
 USER = "hpdesktop"
 PASSWORD = "hpdesktop"
@@ -642,12 +644,13 @@ def step_open(system, low_val=1.5, high_val=3.5, low_time=1, high_time=1, filepa
         else:
             uax.set_ylim(lim2, lim1)
 
-        ylimits = system.actuator_gain([low_val, high_val])
+        #ylimits = system.actuator_gain([low_val, high_val])
+        ylimits = [0, 700]
         yax.set_ylim(ylimits[0] - 250, ylimits[1] + 250)
         uax.set_xlim(0, sampling_time * (total_points - 1))
         yax.set_xlim(0, sampling_time * (total_points - 1))
 
-        fig.suptitle(f'Experiment of Step response with a minimum step of and  a duration of {total_points*sampling_time: 0.2f} seconds')
+        fig.suptitle(f'Experiment of Step response with a duration of {total_points*sampling_time: 0.2f} seconds')
         uax.set_title('Input voltage to DC motor')
         yax.set_title('Velocity in degrees per second')
         uax.set_xlabel('Time (s)')
@@ -687,11 +690,12 @@ def step_open(system, low_val=1.5, high_val=3.5, low_time=1, high_time=1, filepa
                 line_u.set_data(t, u)
                 line_y.set_data(t, y)
                 plt.draw()
-                plt.pause(sampling_time)
+                plt.pause(0.005)
 
     npy.savetxt(filepath, exp, delimiter=",",
                 fmt="%0.8f", comments="", header='t,u,y')
     system.disconnect()
+    plt.show()
     return t, u, y
 
 
@@ -879,32 +883,29 @@ def profile_closed(system, timevalues = [0, 1, 2 ,3], refvalues = [0, 720, 720, 
 
 if __name__ == "__main__":
     motor1 = MotorSystemIoT()
-    t = [0, 1, 2, 3, 4 , 5, 6 ]
-
-    y = [0, 1 , 1 , 2, 1, 1,0]
+    t = [0, 1, 2, 3, 4 , 5, 6, 40]
+    y = [0, 1 , 1 , 2, 1, 1,0,1 ]
     y = [yi *720 for yi in y]
-    set_pid(motor1, kp=0.08426048, ki=0.088115, kd=0.00074865, N=11.9, beta=0.9)
+    set_pid(motor1, kp=0.02442626048, ki=0.0265210734635524428115, kd=0.00072572754865, N=11.9, beta=0.85)
 
     #profile_closed(motor1, t, y )
 
-    signal = [0, 45, 90, 135, 90, 45, 0]
-    #stairs_closed(motor1 , signal, 2)
+    signal = [0, 45, 90, 135, 180, 135, 90, 45, 0]
+    stairs_closed(motor1 , signal, 2)
     # u = np.linspace(-5,5,100);
     # y=motor1.actuator_gain(u)
     # plt.plot(u,y)
     # plt.show()
 
 
-    #stairs_closed(motor1, signal, 1)
+    #stairs_closed(motor1, signal, 1.5)
     # #print(plant.transfer_function(output='velocity'))
     #set_pid(motor1, kp=0.026048, ki=0.028115, kd=0.00074865, N=11.9, beta=0.9)
     #sleep(1)
 
-    #step_closed(motor1, low_val=50, high_val=100, low_time=1, high_time=1)
+    step_closed(motor1, low_val=0, high_val=90, low_time=1, high_time=2)
 
-
-
-    #step_open(motor1, low_val= 1, high_val =2, low_time=1, high_time=2)
+    #step_open(motor1, low_val= 0, high_val =5, low_time=0.5, high_time=0.5)
 
     #pbrs_open(motor1, 1.5,3.5, 4)
     #stairs_closed(motor1, signal, 4)

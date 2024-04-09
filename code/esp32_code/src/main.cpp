@@ -27,12 +27,12 @@ TaskHandle_t h_stepOpenTask;
 
 // PID control default parameters
 float kp = 0.026048;
-float ki = 0.018115;
+float ki = 0.028115;
 float kd  =0.00074865;
 float N = 11.9052;
-float beta = 0.90423;
+float beta = 0.9;
 float h = SAMPLING_TIME; //sampling time
-const float br = 1/0.5;
+const float br = 1/0.99;
 bool reset_int = false;
 
 
@@ -63,8 +63,6 @@ uint32_t points_low = 50;
 uint32_t np = 0;
 uint32_t total_time = 4294967295;
 uint16_t divider = 1;
-
-
 
 
 
@@ -603,33 +601,16 @@ static void publishStateTask (void *pvParameters) {
     }
 }
 
-//float firFilter(float input) {
-//    static float buffer[ORDER_FIR] = {0}; // Static buffer to store previous input samples
-//    static int index = 0; // Index for circular buffer
-//    float output = 0;
-//
-//    // Update buffer with the new input sample
-//    buffer[index] = input;
-//
-//    // Apply the FIR filter
-//    for (int i = 0; i < ORDER_FIR; i++) {
-//        output += firCoeffs[i] * buffer[(index + ORDER_FIR - i) % ORDER_FIR];
-//    }
-//
-//    // Update the buffer index for the next sample
-//    index = (index + 1) % ORDER_FIR;
-//    return output;
-//}
 
-float compDeadZone(float var, float offset, float zm){
+float compDeadZone(float var){
     // This function compensates the dead zone of DC motor
     float udz;
     float sgnvar = abs(var)/var;
-    if (abs(var) < zm){
+    if (abs(var) < DEAD_ZONE){
         udz = 0;
         }
     else{
-         udz = var + sgnvar* offset;
+         udz = var + sgnvar* OFFSET_DEAD_ZONE;
         }
 
     return udz;
@@ -641,15 +622,17 @@ void computeReference() {
     switch (codeTopic) {
 
         case DEFAULT_TOPIC:
-            reference = encoderPot.getCount() * 4.5;
-            displayLed(u, -5, 5, 0, 6);
+            reference  =  encoderPot.getCount() * 3.75;
+            //encoderPot.setCount(0);
+            displayLed(usat, -5, 5, 0, 0);
+            dispLed.setBrightness(70);
             break;
         case USER_SYS_STEP_CLOSED_INT:
             if (np < points_low) {
                 reference = low_val;
                 // sending the indication for publishing
                 xTaskNotify(h_publishStateTask, 0b0001, eSetBits);
-                displayLed(y, low_val, high_val, 0.5, 6);
+                displayLed(y, low_val, high_val, 0.5, 1);
             }
             else if (np <= total_time) {
                 reference = high_val;
@@ -742,7 +725,10 @@ static void controlPidTask(void *pvParameters) {
         u = P + I + D ; // control signal
 
         // Compensation of dead zone for the DC motor
-        u  = compDeadZone(u, .35, 0.04);
+        u  = compDeadZone(u);
+//        if (abs(reference - y) < 0.12858){
+//            u=0;
+//        }
         //saturated control signal
         usat = constrain(u, -5, 5);
         // sending the control signal to motor
@@ -820,7 +806,7 @@ static void generalControlTask(void *pvParameters) {
         // computing the general controlled
         u = computeController();
         // Compensation of dead zone for the DC motor
-        u  = compDeadZone(u, .35, 0.04);
+        u  = compDeadZone(u);
         //saturated control signal
         usat = constrain(u, -5, 5);
 
@@ -949,16 +935,22 @@ void setup() {
 
    // Setting the potentiometer for setting reference
 
-    pinMode(CH_ENC_A_POT , PULLUP);
-    pinMode(CH_ENC_A_POT , PULLUP);
+    pinMode( CH_ENC_A_POT, INPUT_PULLUP);
+    pinMode( CH_ENC_B_POT, INPUT_PULLUP);
+    //ESP32Encoder::useInternalWeakPullResistors = UP;
+//    gpio_set_pull_mode(CH_ENC_A_POT, GPIO_PULLUP_ENABLE);
+//    gpio_set_pull_mode(CH_ENC_B_POT, GPIO_PULLUP_ENABLE);
     encoderPot.attachFullQuad(CH_ENC_A_POT, CH_ENC_B_POT);
-    encoderPot.setFilter(100);
+    encoderPot.clearCount();
+    encoderPot.setFilter(1023);
+//    pcnt_unit_t unit ;
+//    pcnt_set_filter_value(unit , 30000);
 
    // setting rgb led
     dispLed.begin();
     dispLed.clear();
     dispLed.show();
-    dispLed.setBrightness(127);
+    dispLed.setBrightness(30);
 
     //create the task for communication in core 1
     xTaskCreatePinnedToCore(

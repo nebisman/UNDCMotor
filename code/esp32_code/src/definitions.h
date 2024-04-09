@@ -2,31 +2,32 @@
 // Created by LB on 1/18/24.
 #include <stdlib.h>
 
+
+
 // This is the pwm configuration for the DC motor system
 #define  FREQUENCY_PWM     100
 #define  RESOLUTION_PWM    12
 #define  PIN_AIN1          2
-#define  PIN_AIN2          1 // WEMOS 4  // ESPS3 1
+#define  PIN_AIN2          1 // WEMOS 4  // ESP32S3 1
 #define  CH_PWM_AIN1       0
 #define  CH_PWM_AIN2       1
 
-// this is an output for visualizing the performance of the control routine
-#define  PIN_CLOCK         19
+
 
 // This is the configuration of the encoder for sensing position of DC motor
 
-#define CH_ENC_A   17//  WEMOS 25  Channel A of the motor encoder
-#define CH_ENC_B   18 // WEMOS 26  Channel B of the motor encoder
+#define CH_ENC_A  18//  WEMOS 26  ESP32S3 18     Channel A of the motor encoder
+#define CH_ENC_B  17 // WEMOS 25  ESP32S3 17     Channel B of the motor encoder
 
 // This is the configuration for the potentiometer-encoder
 
-#define CH_ENC_A_POT   10//
-#define CH_ENC_B_POT   11 //
+#define CH_ENC_A_POT  11  //WEMOS 5// ESP32S3 11//
+#define CH_ENC_B_POT  10 // WEMOS 23 // ESP32S3 10//
 
 
 // This is the configuration for the ws2812 rgb leds that show the temperature and reference
-#define  LIGHT_PIN         19
-#define  NUMPIXELS          8
+#define  LIGHT_PIN         19  // WEMOS 17 ESP32S3 19
+#define  NUMPIXELS          1
 
 
 // This is the definition for the two cores of ESP32
@@ -99,15 +100,8 @@ const uint8_t gamma8[] = {
 const float percent2pwm = (float) (4095.0/5.0);
 
 // conversion from pulses to degrees from a 600 ppr encoder
-const float pulses2degrees = (float) (360.0/600.0);
+const float pulses2degrees = (float) (360.0/2800.0);
 
-/*********  FIR filter **********/
-#define ORDER_FIR  11
-const float firCoeffs[11] = {
-        0.06628056616,  0.06331735104,  0.08446368575,   0.1024691686,   0.1145277843,
-        0.1187719777,   0.1145277843,   0.1024691686,  0.08446368575,  0.06331735104,
-        0.06628056616
-};
 
 //// Definitions for the PBRS signal
 
@@ -121,5 +115,7 @@ const uint64_t pbrsSignal[32] = {
 };
 
 
-//// Definitions for control
-#define MAX_ERROR_INTEG_RESET 90
+//// Definitions for dead zone
+
+# define DEAD_ZONE 0.06
+# define OFFSET_DEAD_ZONE 0.75
