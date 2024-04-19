@@ -507,8 +507,8 @@ def pbrs_open(system, low_val = 2, high_val = 4, divider = 2,  filepath = r"./ex
     line_u, = uax.plot(t, u, drawstyle='steps-post', color="#338000")
     line_y, = yax.plot(t, y,  color="#d40055")
     uax.set_ylim(low_val - 0.5  , high_val + 0.5 )
-    limits = system.actuator_gain([low_val, high_val])
-    yax.set_ylim(limits[0] - 150, limits[1] + 150)
+    limits = [600,800]#system.actuator_gain([low_val/3, high_val/3])
+    yax.set_ylim(limits[0], limits[1])
 
     # setting the parameters of the step response for sending to ESP32
     fig.suptitle(f'Experiment of System identification with {total_points:d} samples and duration of {total_points*sampling_time: 0.2f} seconds')
@@ -876,9 +876,6 @@ def profile_closed(system, timevalues = [0, 1, 2 ,3], refvalues = [0, 720, 720, 
     system.disconnect()
     return t, y, r, u
 
-# hexlist = "c2b40000,c2b40000,42b40000,42b40000,42b40000,42b40000,42b40000,42b40000"
-# arr = hexframe_to_array(hexlist)
-# print(arr)
 
 
 if __name__ == "__main__":
@@ -890,8 +887,8 @@ if __name__ == "__main__":
 
     #profile_closed(motor1, t, y )
 
-    signal = [0, 45, 90, 135, 180, 135, 90, 45, 0]
-    stairs_closed(motor1 , signal, 2)
+    #signal = [0, 45, 90, 135, 180, 135, 90, 45, 0]
+    #stairs_closed(motor1 , signal, 2)
     # u = np.linspace(-5,5,100);
     # y=motor1.actuator_gain(u)
     # plt.plot(u,y)
@@ -903,11 +900,11 @@ if __name__ == "__main__":
     #set_pid(motor1, kp=0.026048, ki=0.028115, kd=0.00074865, N=11.9, beta=0.9)
     #sleep(1)
 
-    step_closed(motor1, low_val=0, high_val=90, low_time=1, high_time=2)
+    #step_closed(motor1, low_val=0, high_val=90, low_time=1, high_time=2)
 
-    #step_open(motor1, low_val= 0, high_val =5, low_time=0.5, high_time=0.5)
+    step_open(motor1, low_val= 0, high_val =5, low_time=0.5, high_time=0.5)
 
-    #pbrs_open(motor1, 1.5,3.5, 4)
+    #pbrs_open(motor1)
     #stairs_closed(motor1, signal, 4)
 
 

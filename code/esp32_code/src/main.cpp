@@ -6,7 +6,7 @@
 #include "WiFi.h"
 #include <Adafruit_NeoPixel.h>
 #include <OneWire.h>
-#include <DallasTemperature.h>
+
 
 
 
@@ -85,7 +85,7 @@ uint32_t timeValues[50];
 //Integer code of the command sent by the user
 unsigned int codeTopic = DEFAULT_TOPIC;
 
-//Integer code of mode of control, which can be PID or general control (default)
+//Integer code of mode of control, which can be PID (default) or general control
 unsigned int typeControl = PID_CONTROLLER;
 
 // Internet connection variables
@@ -93,7 +93,7 @@ WiFiClient wifiClient;
 PubSubClient mqttClient(wifiClient);
 
 
-// These miscellaneous functions allow to receive formatted data (for instance controllers) from user
+// These miscellaneous functions allow to receive formatted data (for instance controllers) from user's app
 float hex2Float(const char* string){
     // This function converts a 4-digit hexadecimal string received from MQTT to a floating-point number.
     // It enables the reception of precise float numbers without rounding, minimizing the transmitted byte count.
@@ -520,13 +520,7 @@ void IRAM_ATTR onMqttReceived(char* lastTopic, byte* lastPayload, unsigned int l
             vTaskResume(h_publishStateTask);
             vTaskResume(h_generalControlTask);
         }
-
-
     }
-
-
-
-
 }
 
 
@@ -612,7 +606,6 @@ float compDeadZone(float var){
     else{
          udz = var + sgnvar* OFFSET_DEAD_ZONE;
         }
-
     return udz;
 }
 
@@ -937,14 +930,10 @@ void setup() {
 
     pinMode( CH_ENC_A_POT, INPUT_PULLUP);
     pinMode( CH_ENC_B_POT, INPUT_PULLUP);
-    //ESP32Encoder::useInternalWeakPullResistors = UP;
-//    gpio_set_pull_mode(CH_ENC_A_POT, GPIO_PULLUP_ENABLE);
-//    gpio_set_pull_mode(CH_ENC_B_POT, GPIO_PULLUP_ENABLE);
     encoderPot.attachFullQuad(CH_ENC_A_POT, CH_ENC_B_POT);
     encoderPot.clearCount();
     encoderPot.setFilter(1023);
-//    pcnt_unit_t unit ;
-//    pcnt_set_filter_value(unit , 30000);
+
 
    // setting rgb led
     dispLed.begin();

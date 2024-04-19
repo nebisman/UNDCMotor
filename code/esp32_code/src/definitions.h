@@ -57,7 +57,7 @@
 #define USER_SYS_PROFILE_CLOSED    "/motor/user/motor_" PLANT_NUMBER "/prof_closed"
 
 /** Integer definitions of topics to avoid comparison with strings, which is more expensive
-*   in terms of computation */
+    in terms of computation */
 
 #define DEFAULT_TOPIC                  0
 #define USER_SYS_STEP_CLOSED_INT       1
@@ -65,16 +65,17 @@
 #define USER_SYS_PRBS_OPEN_INT         3
 #define USER_SYS_PROFILE_CLOSED_INT    4
 
-//// Codes for modes of control
+/// Codes for modes of control
 #define GENERAL_CONTROLLER             0
 #define PID_CONTROLLER                 1
 
-// Sampling time
+/// Sampling time
 #define SAMPLING_TIME                  0.02
 #define BUFFER_SIZE                    25
 
 
-/**  This matrix is the gamma correction for the leds attached to the plant, which allow to "see" the current
+/**  This matrix is the gamma correction for the leds attached to the plant, which allow to "see" the
+ *  control signal
 */
 const uint8_t gamma8[] = {
         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
@@ -115,7 +116,7 @@ const uint64_t pbrsSignal[32] = {
 };
 
 
-//// Definitions for dead zone
+/// Definitions for dead zone
 
 # define DEAD_ZONE 0.06
 # define OFFSET_DEAD_ZONE 0.75
