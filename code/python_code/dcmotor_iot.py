@@ -1,22 +1,24 @@
 # Required libraries
 from time import sleep
-
 import numpy as np
+from scipy.interpolate import PchipInterpolator, UnivariateSpline
 import paho.mqtt.client as mqtt
 import control as ct
 import struct
 from queue import Queue
 import math
 import json
-import numpy as npy
+from pathlib import Path
+import csv
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use("TkAgg", force=True)
 
+
 # parameters of communication
 
 #BROKER = "broker.hivemq.com"
-BROKER = "192.168.0.10"
+BROKER = "192.168.0.3"
 #BROKER = "18.204.70.207" # amazon mosquitto broker
 # const char BROKER[] = "192.168.0.10";
 PORT = 1883
@@ -24,10 +26,11 @@ USER = "hpdesktop"
 PASSWORD = "hpdesktop"
 
 
+
+
 #topics for subscribing
 
 PLANT_NUMBER = "5678"
-
 codes ={"SYS_USER_SIGNALS_CLOSED"  : "/motor/motor_" + PLANT_NUMBER + "/user/sig_closed",
         "SYS_USER_SIGNALS_OPEN"  : "/motor/motor_" + PLANT_NUMBER + "/user/sig_open",
         "USER_SYS_SET_REF"  : "/motor/user/motor_" + PLANT_NUMBER + "/set_ref",
@@ -42,28 +45,9 @@ codes ={"SYS_USER_SIGNALS_CLOSED"  : "/motor/motor_" + PLANT_NUMBER + "/user/sig
         "BUFFER_SIZE" : 25,
         }
 
-U_ACT = [-5.0000, -4.8782, -4.7564, -4.6346, -4.5128, -4.3910, -4.2692, -4.1474, -4.0256, -3.9038,
-         -3.7821, -3.6603, -3.5385, -3.4167, -3.2949, -3.1731, -3.0513, -2.9295, -2.8077, -2.6859,
-         -2.5641, -2.4423, -2.3205, -2.1987, -2.0769, -1.9551, -1.8333, -1.7115, -1.5897, -1.4679,
-         -1.3462, -1.2244, -1.1026, -0.9808, -0.8590, -0.7372, -0.6154, -0.4936, -0.3718, -0.2500,
-         0.2500, 0.3718, 0.4936, 0.6154, 0.7372, 0.8590, 0.9808, 1.1026, 1.2244, 1.3462,
-         1.4679, 1.5897, 1.7115, 1.8333, 1.9551, 2.0769, 2.1987, 2.3205, 2.4423, 2.5641,
-         2.6859, 2.8077, 2.9295, 3.0513, 3.1731, 3.2949, 3.4167, 3.5385, 3.6603, 3.7821,
-         3.9038, 4.0256, 4.1474, 4.2692, 4.3910, 4.5128, 4.6346, 4.7564, 4.8782, 5.0000
-         ]
-
-Y_ACT = [-2752.5001, -2744.7001, -2709.6002, -2691.6002, -2685.3002, -2639.5502, -2600.8501, -2564.2502, -2564.7002, -2551.9502,
-         -2522.4002, -2503.2002, -2467.2001, -2423.5502, -2360.8502, -2376.7502, -2332.3502, -2284.0502, -2228.8502, -2194.6502,
-         -2145.4501, -2103.4500, -2039.1002, -1975.3501, -1913.1002, -1830.3001, -1752.3002, -1657.0500, -1551.3001, -1439.7001,
-         -1317.0001, -1166.1001, -1007.8501, -840.0001, -644.5501, -415.0500, -188.1000, -31.0500, -14.1000, -5.4000,
-         0.0000, 15.6000, 39.7500, 284.7000, 540.6000, 770.7001, 960.9001, 1151.1001, 1318.3501, 1449.9001,
-         1594.6501, 1730.8502, 1827.3001, 1908.9002, 1953.1500, 2012.7001, 2046.6002, 2122.6502, 2160.9001, 2226.4502,
-         2236.8001, 2262.3001, 2319.9001, 2352.0002, 2376.3002, 2382.6001, 2415.1501, 2445.9001, 2425.9501, 2418.4501,
-         2447.2501, 2457.9001, 2485.8001, 2572.6502, 2595.9001, 2611.6501, 2584.9502, 2605.3501, 2635.2002, 2652.3002
-         ]
 
 PBRS_LENGTH = 1023
-
+PATH = r"./experiment_files/"
 
 """ This is the class defining the IoT motor system"""
 class MotorSystemIoT:
@@ -133,10 +117,29 @@ class MotorSystemIoT:
 
         G = ct.tf(num, den)
         return G
-    def actuator_gain(self, volts = 2.5):
-        velocity = npy.interp(volts, U_ACT, Y_ACT)
-        return velocity
 
+    def speed_from_volts(self, volts = None):
+        if volts == None:
+            raise ValueError("voltage input is required")
+
+        u, y = read_csv_file()
+        interp = PchipInterpolator(u, y)
+        return interp(volts)
+
+    def volts_from_speed(self, speed = None):
+        if speed == None:
+            raise ValueError("speed input is required")
+
+        u, y = read_csv_file()
+        interp = PchipInterpolator(u, y)
+        if speed == 0:
+            uc = 0
+        elif (speed >= y[0]) and (speed <= y[-1]):
+            roots = interp.solve(speed, extrapolate=False)
+            uc = np.mean(roots)
+        else:
+            raise ValueError(f"The speed input must be in the interval {y[0]} to {y[-1]}")
+        return uc
 
 
 
@@ -187,6 +190,21 @@ def hexframe_to_array(hexframe):
     return array
 
 
+def read_csv_file(filepath=PATH + 'static_gain_response.csv'):
+    with open(filepath , newline='') as file:
+        reader = csv.reader(file)
+        # Iterate over each row in the CSV file
+        num_line = 0
+        u = []
+        y = []
+        for row in reader:
+            if num_line != 0:
+               u.append(float(row[0]))
+               y.append(float(row[1]))
+            num_line += 1
+        return u, y
+
+
 def set_reference(system, ref_value=50):
     ref_hex = float2hex(ref_value)
     topic_pub = system.codes["USER_SYS_SET_REF"]
@@ -218,7 +236,7 @@ def set_pid(system, kp=1, ki=0.4, kd=0, N=5, beta=1):
     return rcode
 
 
-def step_closed(system, low_val=0, high_val=90, low_time=1, high_time=1, filepath =r"./experiment_files/DCmotor_step_closed_exp.csv"):
+def step_closed(system, low_val=0, high_val=90, low_time=1, high_time=1, filepath = PATH + "DCmotor_step_closed_exp.csv"):
 
     def step_message(system, userdata, message):
         # This inner function is the callback of the received messages
@@ -583,7 +601,122 @@ def pbrs_open(system, low_val = 2, high_val = 4, divider = 2,  filepath = r"./ex
     return t, u, y
 #
 #
-def step_open(system, low_val=1.5, high_val=3.5, low_time=1, high_time=1, filepath = r"./experiment_files/DCmotor_step_open_exp.csv", visualize = True):
+def step_open(system, low_val=1.5, high_val=3.5, low_time=1, high_time=1, filepath = r"./experiment_files/DCmotor_step_open_exp.csv"):
+    def step_message(system, userdata, message):
+        q.put(message)
+    # reading the configuration parameters from the
+    # dictionary of codes
+
+    topic_pub = system.codes["USER_SYS_STEP_OPEN"]
+    topic_sub = system.codes["SYS_USER_SIGNALS_OPEN"]
+    sampling_time = system.codes["MOTOR_SAMPLING_TIME"]
+    buffer = system.codes["BUFFER_SIZE"]
+
+
+    # setting the parameters of the step response for sending to ESP32
+
+    points_high = round(high_time / sampling_time) + 1
+    points_low = round(low_time / sampling_time)
+    total_points = points_low + points_high
+    frames = math.ceil(total_points / buffer)
+    points_low_hex = long2hex(points_low)
+    points_high_hex = long2hex(points_high)
+    low_val_hex = float2hex(low_val)
+    high_val_hex = float2hex(high_val)
+
+    # command sent to ESP32 for obtaining the  open loop step response
+    message = json.dumps({"low_val": low_val_hex,
+                          "high_val": high_val_hex,
+                          "points_low": points_low_hex,
+                          "points_high": points_high_hex,
+                          })
+
+    # setting the callback for receiving messages
+
+    system.client.on_message = step_message
+    system.connect()
+    system.subscribe(topic_sub)
+    # sending the step_closed command through mqtt when config has been done
+    system.publish(topic_pub, message)
+
+    # vectors for storing the results and the experiment
+    y = []
+    u = []
+    t = []
+    exp = []
+    # Setting the graphics configuration for visualizing the experiment
+    fig, (yax, uax) = plt.subplots(nrows=2, ncols=1, figsize=(12, 8))
+
+    uax.grid(True);
+    uax.grid(color='gray', linestyle='--', linewidth=0.25)
+    yax.grid(True);
+    yax.grid(color='gray', linestyle='--', linewidth=0.25)
+    line_u, = uax.plot(t, u, drawstyle='steps-post', color="#338000")
+    line_y, = yax.plot(t, y, drawstyle='steps-post',  color="#d40055")
+
+
+    if  high_val  >=  low_val:
+        ulimits = [low_val, high_val]
+        ylimits = system.speed_from_volts([low_val, high_val])
+    else:
+        ulimits = [high_val, low_val]
+        ylimits = system.speed_from_volts([high_val, low_val])
+
+    percent = 0.2
+    uax.set_ylim((1 - percent)*ulimits[0], (1 + percent)*ulimits[1])
+    yax.set_ylim((1 - percent)*ylimits[0], (1 + percent)*ylimits[1])
+    uax.set_xlim(0, sampling_time * (total_points - 1))
+    yax.set_xlim(0, sampling_time * (total_points - 1))
+
+    fig.suptitle(f'Experiment of Step response with a duration of {total_points*sampling_time: 0.2f} seconds')
+    uax.set_title('Input voltage to DC motor')
+    yax.set_title('Velocity in degrees per second')
+    uax.set_xlabel('Time (s)')
+    uax.set_ylabel('Volts')
+    yax.set_ylabel('Degrees/s')
+    line_u.set_data(t, u)
+    line_y.set_data(t, y)
+    plt.draw()
+
+    # this is the queue of messages filled by the step_message callback
+    q = Queue()
+
+    # at start we define a current frame of -1 indicating that no frame
+    # has already been received
+    curr_frame = -1
+    while curr_frame < frames:
+        try:
+            message = q.get(True, 20* buffer * sampling_time)
+        except:
+            raise TimeoutError("The connection has been lost. Please try again")
+        decoded_message = str(message.payload.decode("utf-8"))
+        msg_dict = json.loads(decoded_message)
+        frame_hex = str(msg_dict["frame"])
+        curr_frame = hex2long(frame_hex)
+        uframe_hex = str(msg_dict["u"])
+        yframe_hex = str(msg_dict["y"])
+        uframe = hexframe_to_array(uframe_hex)
+        yframe = hexframe_to_array(yframe_hex)
+        tframe = sampling_time * (np.arange(len(yframe)) + (curr_frame - 1) * buffer)
+
+        for ind in range(len(yframe)):
+            y.append(yframe[ind])
+            u.append(uframe[ind])
+            t.append(tframe[ind])
+            exp.append([tframe[ind], uframe[ind], yframe[ind]])
+            line_u.set_data(t, u)
+            line_y.set_data(t, y)
+            plt.draw()
+            plt.pause(0.005)
+    plt.close()
+    np.savetxt(filepath, exp, delimiter=",",
+                fmt="%0.8f", comments="", header='t,u,y')
+    system.disconnect()
+    return t, u, y
+
+
+
+def step_open_staticgain(system, low_val=1.5, high_val=3.5, low_time=1, high_time=1):
     def step_message(system, userdata, message):
         q.put(message)
     # reading the configuration parameters from the
@@ -615,50 +748,17 @@ def step_open(system, low_val=1.5, high_val=3.5, low_time=1, high_time=1, filepa
 
     # setting the callback for receiving messages
     system.client.on_message = step_message
-    system.connect()
-    system.subscribe(topic_sub)
 
-    # sending the step_closed command through mqtt when config has been done
+    if not system.client.is_connected():
+        system.connect()
+        system.subscribe(topic_sub)
+        # sending the step_closed command through mqtt when config has been done
+
     system.publish(topic_pub, message)
-
     # vectors for storing the results and the experiment
     y = []
     u = []
     t = []
-    exp = []
-
-    if visualize == True:
-        # Setting the graphics configuration for visualizing the experiment
-        fig, (yax, uax) = plt.subplots(nrows=2, ncols=1, figsize=(12, 8))
-        #fig, ax = plt.subplots()
-        uax.grid(True);
-        uax.grid(color='gray', linestyle='--', linewidth=0.25)
-        yax.grid(True);
-        yax.grid(color='gray', linestyle='--', linewidth=0.25)
-        line_u, = uax.plot(t, u, drawstyle='steps-post', color="#338000")
-        line_y, = yax.plot(t, y, drawstyle='steps-post',  color="#d40055")
-        lim1 = low_val - 0.5
-        lim2 = high_val + 0.5
-        if lim2 >= lim1:
-            uax.set_ylim(lim1 , lim2)
-        else:
-            uax.set_ylim(lim2, lim1)
-
-        #ylimits = system.actuator_gain([low_val, high_val])
-        ylimits = [0, 700]
-        yax.set_ylim(ylimits[0] - 250, ylimits[1] + 250)
-        uax.set_xlim(0, sampling_time * (total_points - 1))
-        yax.set_xlim(0, sampling_time * (total_points - 1))
-
-        fig.suptitle(f'Experiment of Step response with a duration of {total_points*sampling_time: 0.2f} seconds')
-        uax.set_title('Input voltage to DC motor')
-        yax.set_title('Velocity in degrees per second')
-        uax.set_xlabel('Time (s)')
-        uax.set_ylabel('Volts')
-        yax.set_ylabel('Degrees/s')
-        line_u.set_data(t, u)
-        line_y.set_data(t, y)
-        plt.draw()
 
     # this is the queue of messages filled by the step_message callback
     q = Queue()
@@ -679,24 +779,11 @@ def step_open(system, low_val=1.5, high_val=3.5, low_time=1, high_time=1, filepa
         yframe_hex = str(msg_dict["y"])
         uframe = hexframe_to_array(uframe_hex)
         yframe = hexframe_to_array(yframe_hex)
-        tframe = sampling_time * (npy.arange(len(yframe)) + (curr_frame - 1) * buffer)
+        y.extend(yframe)
+        u.extend(uframe)
 
-        for ind in range(len(yframe)):
-            y.append(yframe[ind])
-            u.append(uframe[ind])
-            t.append(tframe[ind])
-            exp.append([tframe[ind], uframe[ind], yframe[ind]])
-            if visualize == True:
-                line_u.set_data(t, u)
-                line_y.set_data(t, y)
-                plt.draw()
-                plt.pause(0.005)
+    return u, y
 
-    npy.savetxt(filepath, exp, delimiter=",",
-                fmt="%0.8f", comments="", header='t,u,y')
-    system.disconnect()
-    plt.show()
-    return t, u, y
 
 
 
@@ -866,7 +953,7 @@ def profile_closed(system, timevalues = [0, 1, 2 ,3], refvalues = [0, 720, 720, 
             line_y.set_data(t, y)
 
             # drawing a new point from the current dataframe
-            plt.draw()
+            plt.show()
             plt.pause(sampling_time)
 
     # Now, we save the results of the experiment in the provided filepath
@@ -878,12 +965,207 @@ def profile_closed(system, timevalues = [0, 1, 2 ,3], refvalues = [0, 720, 720, 
 
 
 
+def get_static_model(system, lowval = 1.5):
+    def moving_average(signal):
+        n = 25
+        """Calculate the moving average filter of a signal with order n."""
+        weights = np.ones(n) / n
+        return np.convolve(signal, weights, mode='valid')[-1]
+
+    # This is the configuration for the figure displayed while acquiring data
+    yee = []
+    uee = []
+
+    fig, ax = plt.subplots(figsize=(12, 8))
+    fig.set_facecolor('#b7c8be')
+    ax.set_title('Static gain response experiment for UNDCMotor')
+    ax.set_xlabel('Input (Volts)')
+    ax.set_ylabel('Steady state speed (Degrees/s)')
+
+    ax.grid(True);
+    ax.set_facecolor('#f4eed7')
+    ax.set_xticks([-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5])
+    ax.grid(color='#1a1a1a40', linestyle='--', linewidth=0.25)
+    line_exp, = ax.plot(uee, yee, color="#00aa00", linewidth=1.5)
+    ax.set_xlim(-5, 5)
+    ax.set_ylim(-780, 780)
+    plt.draw()
+
+    # These are the parameters for obtaining the actuator response
+    timestep = 3
+    points = 30
+    dz_point = 0.32
+
+    # # This is the set of step responses for obtaining steady state in speed
+    delta_dz = 0.02
+    u_pos = np.logspace(np.log10(dz_point - delta_dz), np.log10(5), points , endpoint=True, base=10)
+    u_neg = -u_pos[::-1]
+    u_tot = np.concatenate((u_neg, [0], u_pos))
+    exp = []
+
+    for ui in u_tot:
+        lowval_turn = np.sign(ui) * lowval
+        if ui == 0:
+            uf = 0
+            yf = 0
+        else:
+            print(lowval)
+            u, y = step_open_staticgain(system, lowval_turn, ui, 0.5, timestep)
+            yf = moving_average(y)
+            uf = u[-1]
+        exp.append([uf, yf])
+        yee.append(yf)
+        uee.append(ui)
+        line_exp.set_data(uee, yee)
+        plt.draw()
+        plt.pause(0.1)
+
+    Path(PATH).mkdir(exist_ok=True)
+    np.savetxt(PATH + "static_gain_response.csv", exp, delimiter=",", fmt="%0.8f", comments="", header='u,y')
+    system.disconnect()
+    return
+
+def get_fomodel_step(system, speed=500, timestep=2.5):
+    """First we estimate the gain of the model using
+     the mean value theorem for derivatives"""
+
+    # We calculate voltages around the operation point
+    # given a  deviation percent
+    speed = np.clip(speed, -770, 770)
+    percent = 0.15
+    u = system.volts_from_speed(speed)
+    ua = (1 - percent) * u
+    ub = (1 + percent) * u
+    if abs(speed) < 220:
+        ua = 0.45 * np.sign(speed)
+        ub = 0.35 *  np.sign(speed)
+
+
+
+    # Obtaining the step response of the motor, where the low level of the step
+    # and the high level last the time given by timestep
+
+    t, u, y = step_open(system, low_val=ua, high_val=ub, low_time=timestep, high_time=timestep)
+
+    # we interpolate the experimental response
+    interp = PchipInterpolator(t, y)
+
+    # we estimate the steady state speeds achieved during the low level of the step.
+    ta = [t0 for t0 in t if t0 > timestep - 1 and t0 < timestep]
+    ya = np.mean(interp(ta))
+
+    # we estimate the steady state speeds achieved during the high level of the step.
+    tb = [t0 for t0 in t if t0 > timestep + 1 and t0 < 2 * timestep]
+    yb = np.mean(interp(tb))
+
+    # we use the mean value theorem to approximate the gain of the motor
+    delta_y = yb - ya
+    delta_u = ub - ua
+    alpha = delta_y / delta_u
+
+    # the constant tau in the first order systems occurs when the speed response
+    # changes by 63%
+
+    y_t1  = ya + 0.2 * delta_y
+    y_t2  = ya + 0.4 * delta_y
+    y_t3  = ya + 0.63212 * delta_y
+    y_t4  = ya + 0.8 * delta_y
+
+    # with this value, we can approximate the value of tau
+    # solving the inverse equation by means of the interpolator
+    roots_t1 = interp.solve(y_t1, extrapolate=False)
+    roots_t2 = interp.solve(y_t2, extrapolate=False)
+    roots_t3 = interp.solve(y_t3, extrapolate=False)
+    roots_t4 = interp.solve(y_t4, extrapolate=False)
+
+    # we take the mean for the case that the noise produces multiple values.
+    # we also need to substract the time in which the step changes
+
+    t1  = np.mean(roots_t1) - timestep
+    t2  =  np.mean(roots_t2) - timestep
+    tau3 = np.mean(roots_t3) - timestep
+    #t4 =  np.mean(roots_t4) - timestep
+
+    tau1 = t1 / 0.2231
+    tau2 = t2 / 0.5108
+
+    #tau4 = t4 /1.6094
+
+    tau = (tau1 + tau2 + tau3)/3
+
+
+
+    # we build the model
+    G = ct.tf(alpha, [tau, 1])
+
+    # we calculate the step response from the model
+    um = np.array(u) - u[0]  # it is required to compute the LTI model with a signal starting in 0.
+    tm, ym = ct.forced_response(G, t, um)
+    ym = ym + ya
+
+    # now we compare the model with the experimental data
+    fig, (ay, au) = plt.subplots(nrows=2, ncols=1, width_ratios = [1], height_ratios= [4,1], figsize=(12, 8))
+    fig.set_facecolor('#b7c4c8f0')
+    ay.set_title('Estimated first order model for UNDCMotor')
+    ay.set_ylabel('Speed (Degrees/s)')
+    ay.grid(True);
+    ay.grid(color='#1a1a1a40', linestyle='--', linewidth=0.25)
+    ay.set_facecolor('#f4eed7')
+    ay.set_xlim(0, 2*timestep)
+    box = dict(boxstyle='round,pad=0.5', facecolor='white', edgecolor='white', alpha=0.5)
+    ay.text(4, (ya+yb)/2, r'$\Delta_{y,e}=%0.2f$'%delta_y, fontsize=16, color='#ff0066',
+             ha='center', va='bottom', bbox=box)
+    ay.text(timestep + tau + 0.2, ya + 0.63212*delta_y,  r'$\tau = %0.2f$'%tau, fontsize=16, color='#ff0066')
+
+    au.set_xlim(0, 2 *timestep)
+    au.grid(True);
+    au.set_facecolor('#d7f4ee')
+    au.grid(color='#1a1a1a40', linestyle='--', linewidth=0.25)
+    au.text(4, (ua+ub)/2, r'$\Delta_u=%0.2f$'%delta_u, fontsize=16, color="#00aa00",
+             ha='center', va='bottom', bbox=box)
+    au.set_xlabel('Time (seconds)')
+    ay.set_ylabel('Voltage (V)')
+    line_exp, = ay.plot(t, y, color="#0088aa", linewidth=1.5, linestyle=(0, (1, 1)))
+    line_mod, = ay.plot(tm, ym, color="#ff0066", linewidth=1.5, )
+    ay.plot(timestep + tau, ya + 0.63212*delta_y , color="#ff0066", linewidth=1.5, marker=".", markersize=13)
+    line_u, = au.plot(t, u, color="#00aa00")
+    modelstr = r"Model $G(s)= \frac{\alpha_m}{\tau_m\,s + 1} = \frac{%0.3f }{%0.3f\,s+1}$" %(alpha, tau)
+
+    ay.legend([line_exp, line_mod], ['Data', modelstr], fontsize=16)
+    au.legend([line_u], ['Input'])
+    PATH1 = r'/home/leonardo/sharefolder/ProyectoSabatico/Reporte/figures/'
+    #plt.savefig(PATH1 + 'first_model_response.svg', format='svg', bbox_inches='tight')
+    plt.show()
+
+    Path(PATH).mkdir(exist_ok=True)
+    exp = [[alpha, tau]]
+
+    np.savetxt(PATH + "first_order_model.csv", exp, delimiter=",", fmt="%0.8f", comments="", header='alpha, tau')
+
+    system.disconnect()
+    return G
+
+
+
 if __name__ == "__main__":
     motor1 = MotorSystemIoT()
-    t = [0, 1, 2, 3, 4 , 5, 6, 40]
-    y = [0, 1 , 1 , 2, 1, 1,0,1 ]
-    y = [yi *720 for yi in y]
-    set_pid(motor1, kp=0.02442626048, ki=0.0265210734635524428115, kd=0.00072572754865, N=11.9, beta=0.85)
+    #val = motor1.volts_from_speed(200)
+    print(get_fomodel_step(motor1,400))
+    # print(motor1.volts_from_speed(1.15*400))
+    # print(motor1.volts_from_speed(0.85*400))
+
+
+
+
+
+    #u = 1
+    #motor1.get_steady_state_curve(lowval=1.5)
+
+
+    # t = [0, 1, 2, 3, 4 , 5, 6, 40]
+    # y = [0, 1 , 1 , 2, 1, 1,0,1 ]
+    # y = [yi *720 for yi in y]
+    # set_pid(motor1, kp=0.02442626048, ki=0.0265210734635524428115, kd=0.00072572754865, N=11.9, beta=0.85)
 
     #profile_closed(motor1, t, y )
 
@@ -902,9 +1184,79 @@ if __name__ == "__main__":
 
     #step_closed(motor1, low_val=0, high_val=90, low_time=1, high_time=2)
 
-    step_open(motor1, low_val= 0, high_val =5, low_time=0.5, high_time=0.5)
+    #step_open(motor1, low_val= 0, high_val =5, low_time=1, high_time=1)
 
     #pbrs_open(motor1)
     #stairs_closed(motor1, signal, 4)
 
 
+    # def get_model_from_step(system, speed = 500, timestep = 2.5):
+    #     """First we estimate the gain of the model using
+    #      the mean value theorem for derivatives"""
+    #
+    #     # We calculate voltages around the operation point
+    #     # given a  deviation percent
+    #     percent = 0.15
+    #     u = system.volts_from_speed(speed)
+    #     ua = (1 - percent)*u
+    #     ub = (1 + percent)*u
+    #
+    #     # Obtaining the step response of the motor, where the low level of the step
+    #     # and the high level last the time given by timestep
+    #
+    #     t, u, y = step_open(system, low_val=ua, high_val=ub, low_time=timestep, high_time=timestep)
+    #
+    #     # we interpolate the experimental response
+    #     interp = PchipInterpolator(t, y)
+    #
+    #     # we estimate the steady state speeds achieved during the low level of the step.
+    #     ta = [t0 for t0 in t if t0> timestep - 1 and t0 < timestep]
+    #     ya = np.mean(interp(ta))
+    #
+    #     # we estimate the steady state speeds achieved during the high level of the step.
+    #     tb = [t0 for t0 in t if t0 > timestep + 1 and t0 < 2 * timestep]
+    #     yb = np.mean(interp(tb))
+    #
+    #     # we use the mean value theorem to approximate the gain of the motor
+    #     delta_y = yb - ya
+    #     delta_u = ub - ua
+    #     alpha = delta_y / delta_u
+    #
+    #     # the constant tau in the first order systems occurs when the speed response
+    #     # changes by 63%
+    #     y_tau = ya + 0.63212*delta_y
+    #
+    #     # with this value, we can approximate the value of tau
+    #     # solving the inverse equation by means of the interpolator
+    #     roots = interp.solve(y_tau, extrapolate=False )
+    #
+    #     # we take the mean for the case that the noise produces multiple values.
+    #     # we also need to substract the time in which the step changes
+    #     tau = np.mean(roots)  - timestep
+    #
+    #     # we build the model
+    #     G = ct.tf(alpha, [tau, 1])
+    #
+    #     # we calculate the step response from the model
+    #     um = np.array(u)-u[0] # it is required to compute the LTI model with a signal starting in 0.
+    #     tm, ym  = ct.forced_response(G, t, um)
+    #     ym = ym + ya
+    #     # we compare the model with the experimental data
+    #     fig, ax = plt.subplots(figsize=(12, 8))
+    #     fig.set_facecolor('#b7c4c8f0')
+    #     ax.set_title('Estimated first order model for UNDCMotor')
+    #     ax.set_xlabel('Time (seconds)')
+    #     ax.set_ylabel('Speed (Degrees/s)')
+    #     ax.grid(True);
+    #     ax.set_facecolor('#f4eed7')
+    #     #ax.set_xticks([-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5])
+    #     ax.grid(color='#1a1a1a40', linestyle='--', linewidth=0.25)
+    #     line_exp, = ax.plot(t, y, color="#0088aa", linewidth=1.5 , linestyle=(0, (1, 1)))
+    #     line_mod, = ax.plot(tm, ym, color="#ff0066", linewidth=1.5,)
+    #     plt.show()
+    #     plt.legend()
+    #     Path(PATH).mkdir(exist_ok=True)
+    #     exp = [[alpha, tau]]
+    #     np.savetxt(PATH + "first_order_model.csv", exp, delimiter=",", fmt="%0.8f", comments="", header='alpha, tau')
+    #     self.disconnect()
+    #     return

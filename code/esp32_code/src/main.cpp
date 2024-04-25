@@ -625,13 +625,13 @@ void computeReference() {
                 reference = low_val;
                 // sending the indication for publishing
                 xTaskNotify(h_publishStateTask, 0b0001, eSetBits);
-                displayLed(y, low_val, high_val, 0.5, 1);
+                displayLed(y, low_val, high_val, 0.5, 0);
             }
             else if (np <= total_time) {
                 reference = high_val;
                 // sending the indication for publishing
                 xTaskNotify(h_publishStateTask, 0b0001, eSetBits);
-                displayLed(y, low_val, high_val, 0.5, 6);
+                displayLed(y, low_val, high_val, 0.5, 0);
             }
             else if (np == total_time + 1){
                 printf("Closed loop step response completed\n");
@@ -886,16 +886,19 @@ static void stepOpenTask(void *pvParameters) {
         //currPosition = encoderMotor.getCount() * pulses2degrees;
         y = encoderMotor.getCount() * pulses2degrees/ h;
         encoderMotor.clearCount();
+
         //lastPosition = currPosition;
         if (np < points_low) {
             u = low_val;
             voltsToMotor(u);
             xTaskNotify(h_publishStateTask, 0b0010, eSetBits);
+            displayLed(u, -5 ,5, 0.2, 0);
         }
         else if (np <= total_time) {
             u  = high_val;
             voltsToMotor(u);
             xTaskNotify(h_publishStateTask, 0b0010, eSetBits);
+            displayLed(u, -5 ,5, 0.2, 0);
         }
         else if (np == total_time + 1){
             voltsToMotor( 0);
