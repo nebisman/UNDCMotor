@@ -66,8 +66,14 @@
 #define USER_SYS_PROFILE_CLOSED_INT    4
 
 /// Codes for modes of control
-#define GENERAL_CONTROLLER             0
-#define PID_CONTROLLER                 1
+#define PID_CONTROLLER                 0
+#define PID_CONTROLLER_SPEED           1
+#define GENERAL_CONTROLLER             2
+#define GENERAL_CONTROLLER_SPEED       3
+#define GENERAL_CONTROLLER_2P          4
+#define GENERAL_CONTROLLER_SPEED_2P    5
+
+#define MAX_ORDER                      10
 
 /// Sampling time
 #define SAMPLING_TIME                  0.02
@@ -118,5 +124,6 @@ const uint64_t pbrsSignal[32] = {
 
 /// Definitions for dead zone
 
-# define DEAD_ZONE 0.06
-# define OFFSET_DEAD_ZONE 0.75
+# define DEAD_ZONE 0.1
+
+
