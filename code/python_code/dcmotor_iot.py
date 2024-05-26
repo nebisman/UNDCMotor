@@ -76,13 +76,18 @@ class MotorSystemIoT:
             print("Unexpected disconnection.")
 
     def on_message(self, client, userdata, message):
-        print(f"Received  '{message.payload.decode()}'")
+        return
+        #pass
+        #print(f"Received  '{message.payload.decode()}'")
 
     def on_subscribe(self, client, userdata, mid, granted_qos):
-        print("Subscribed: ", mid, " ", granted_qos)
+        return
+        #print("Subscribed: ", mid, " ", granted_qos)
 
     def on_publish(self, client, userdata, mid):
-        print("Message Published: ", mid)
+        return
+
+        #print("Message Published: ", mid)
 
     def connect(self):
         self.client.username_pw_set(USER, PASSWORD)
@@ -378,7 +383,7 @@ def step_closed(system, r0=0 , r1=100, t0=0 ,  t1=1, filepath = PATH + "DCmotor_
                 fmt="%0.8f", comments="", header='t,r,y,u')
     system.disconnect()
     plt.show()
-    return t, y, r, u
+    return t, r, y, u
 
 
 def stairs_closed(system, stairs=[40, 50, 60], duration= 2, filepath = PATH + "DCmotor_stairs_closed_exp.csv"):
@@ -506,70 +511,82 @@ def stairs_closed(system, stairs=[40, 50, 60], duration= 2, filepath = PATH + "D
                 fmt="%0.8f", comments="", header='t,r,y,u')
     # Now all is done, close the connection and close the figure.
     system.disconnect()
-    return t, y, r, u
+    return t, r, y, u
 
 
-def set_controller(system, controller, output='angle', struct=1):
-
-    if (output == "angle") & (struct == 1):
-        type_control = 2
-    elif (output == "speed") & (struct == 1) :
-        type_control = 3
-    elif (output == "angle") & (struct == 2):
-        type_control  = 4
-    elif (output == "speed") & (struct == 2):
-        type_control  = 5
-    else:
-        raise ValueError("valid value for output is 'angle' or 'speed'")
+def set_controller(system, controller, output='angle', deadzone=0.2):
 
 
-    topic_pub = system.codes["USER_SYS_SET_GENCON"]
-    sampling_time = system.codes["MOTOR_SAMPLING_TIME"]
-    Cvecont = ct.tf2ss(controller)
-    order = len(Cvecont.A)
-    Cve = ct.c2d(Cvecont, sampling_time, method='tustin')
-    Ai, Bi, Ci, Di = Cve.A, Cve.B[:, 0], Cve.C,  Cve.D[0]
-    int_system  = ct.ss(Ai, Bi, Ci, Di)
-    int_system, T = ct.canonical_form(int_system)
-    Cve = ct.similarity_transform(Cve,T)
-    A = Cve.A
-    B = Cve.B
-    Cc = Cve.C
-    Dc = Cve.D
-    In = np.diag([100 for i in range(order)])
-    L, S, E = ct.dlqr(np.transpose(A), np.transpose(Cc), In, 1)
-    #P = [0.6 + 0.001*j for j in range(order)]
-    #L = ct.place(np.transpose(A), np.transpose(Cc), P)
-    L = np.transpose(L)
-    Ac = A - L * Cc
-    Bc = B - L * Dc
-    if (np.size(Bc, axis=1)) == 1:
-        B1 = []
-        for row in Bc:
-            for e in row:
-                B1.append([e, -e])
-        Bc = np.array(B1)
-        Dc = np.array([[Dc[0][0], -Dc[0][0]]])
-    A_hex = matrix2hex(Ac)
-    B_hex = matrix2hex(Bc)
-    C_hex = matrix2hex(Cc)
-    D_hex = matrix2hex(Dc)
-    L_hex = matrix2hex(L)
-    order_hex = long2hex(order)
-    type_control_hex = long2hex(type_control)
-    message = json.dumps({"order": order_hex,
-                          "A": A_hex,
-                          "B": B_hex,
-                          "C": C_hex,
-                          "D": D_hex,
-                          "L": L_hex,
-                          "typeControl": type_control_hex})
 
-    system.connect()
-    system.publish(topic_pub, message)
-    system.disconnect()
-    rcode = True
-    return rcode
+    def set_controller(system, controller):
+
+        topic_pub = system.codes["USER_SYS_SET_GENCON"]
+        sampling_time = system.codes["MOTOR_SAMPLING_TIME"]
+        struct = len(controller.den[0])
+
+        if (output == "angle") & (struct == 1):
+            type_control = 2
+        elif (output == "speed") & (struct == 1):
+            type_control = 3
+        elif (output == "angle") & (struct == 2):
+            type_control = 4
+        elif (output == "speed") & (struct == 2):
+            type_control = 5
+        else:
+            raise ValueError("valid value for output is 'angle' or 'speed'")
+
+
+        if struct == 1:
+            A1, B1, C1, D1 = ct.ssdata(controller)
+            Ad, Bd, Cd, Dd, dt = cont2discrete((A1, B1, C1, D1), sampling_time, method='bilinear')
+
+        elif struct == 2:
+            A1, B1, C1, D1 = ct.ssdata(ct.tf(controller.num[0][0], controller.den[0][0]))
+            A2, B2, C2, D2 = ct.ssdata(ct.tf(controller.num[0][1], controller.den[0][1]))
+            A2P = A1.T
+            B2P = np.block([C1.T, C2.T])
+            C2P = B1.T
+            D2P = np.block([D1, D2])
+            Ad, Bd, Cd, Dd, dt = cont2discrete((A2P, B2P, C2P, D2P), sampling_time, method='bilinear')
+
+        Cve = ct.ss(Ad, Bd, Cd, Dd, dt=sampling_time)
+        Ai, Bi, Ci, Di = Cve.A, Cve.B[:, 0], Cve.C, Cve.D[0][0]
+        int_system = ct.ss(Ai, Bi, Ci, Di)
+        int_system, T = ct.canonical_form(int_system)
+        Cve = ct.similarity_transform(Cve, T)
+        A = Cve.A
+        B = Cve.B
+        Cc = Cve.C
+        Dc = Cve.D
+        order = np.size(A, 0)
+        In = np.diag([100 for i in range(order)])
+        L, S, E = ct.dlqr(np.transpose(A), np.transpose(Cc), In, 1)
+        L = np.transpose(L)
+        Ac = A - L * Cc
+        Bc = B - L * Dc
+        if struct == 1:
+            Bc = np.block([Bc, -Bc])
+            Dc = np.array([[Dc[0][0], -Dc[0][0]]])
+        A_hex = matrix2hex(Ac)
+        B_hex = matrix2hex(Bc)
+        C_hex = matrix2hex(Cc)
+        D_hex = matrix2hex(Dc)
+        L_hex = matrix2hex(L)
+        order_hex = long2hex(order)
+        type_control_hex = long2hex(type_control)
+        message = json.dumps({"order": order_hex,
+                              "A": A_hex,
+                              "B": B_hex,
+                              "C": C_hex,
+                              "D": D_hex,
+                              "L": L_hex,
+                              "typeControl": type_control_hex,
+                              })
+
+        system.connect()
+        system.publish(topic_pub, message)
+        system.disconnect()
+        return
 
 
 

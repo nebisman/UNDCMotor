@@ -308,7 +308,7 @@ void resumeControl(){
             vTaskResume(h_generalControlTask);
             break;
         case GENERAL_CONTROLLER_2P:
-            vTaskResume(h_speedGenControlTask);
+            vTaskResume(h_generalControlTask);
             break;
     }
 }
@@ -402,6 +402,7 @@ void IRAM_ATTR onMqttReceived(char* lastTopic, byte* lastPayload, unsigned int l
         const char *hex_D = doc["D"];
         const char *hex_L = doc["L"];
         typeControl  = hex2Long((const char *) doc["typeControl"]);
+        deadzone =  hex2Float((const char *) doc["deadzone"]);
         hexStringToMatrix( *A, hex_A, order, order, MAX_ORDER);
         hexStringToMatrix( *B, hex_B, order, 2, 2);
         hexStringToFloatArray(C, hex_C, order);
@@ -438,7 +439,6 @@ void IRAM_ATTR onMqttReceived(char* lastTopic, byte* lastPayload, unsigned int l
     }
 
     else if (strstr(lastTopic, USER_SYS_SET_REF)) {
-        //codeTopic = USER_SYS_SET_REF_INT;
         deserializeJson(doc, lastPayload);
         reference = hex2Float((const char *) doc["reference"]);
         reset_int = true;
@@ -846,12 +846,15 @@ float computeController(float limit, bool type){
     float Xnew[10] = {0};
     static float control = 0;
     float e;
+    static float y_ant;
+    float v;
 
     if (reset_int) {
         for (size_t  i = 0; i < order; i++){
             X[i] = 0;
         }
         control = 0;
+        y_ant=0;
        // reset_int = false;
         return 0;
     }
@@ -861,9 +864,9 @@ float computeController(float limit, bool type){
             for (size_t j = 0; j < order; j++) {
                 Xnew[i] += A[i][j] * X[j];
             }
-            if (type) {
+            if (type == true) {
                Xnew[i] += B[i][0] * reference + B[i][1] * y + L[i] * control;
-            }
+                           }
             else{
                Xnew[i] += B[i][0] * e + L[i] * control;
             }
@@ -875,6 +878,12 @@ float computeController(float limit, bool type){
         for (size_t i = 0; i < order; i++) {
             X[i] = Xnew[i];
         }
+        v = (y - y_ant) / h;
+        if ((abs(e) <= 0.23) & abs(v) <= 10){
+            control = 0;
+        }
+
+        y_ant = y;
         control = constrain(control, -limit,  limit);
         return control;
     }
@@ -891,7 +900,8 @@ static void generalControlTask(void *pvParameters) {
     //this pin is only for vizualizing the correct timing of the control routine
     // Set the sampling time for the task at h=0.02 ms
     const TickType_t taskPeriod = (pdMS_TO_TICKS(1000*h));
-    static float y_ant;
+    float v;
+    float e;
 
     for (;;) {
         TickType_t xLastWakeTime = xTaskGetTickCount();
@@ -900,7 +910,6 @@ static void generalControlTask(void *pvParameters) {
             encoderPot.clearCount();
             computeController(5-deadzone, false);
             reset_int = false;
-            y_ant = 0;
             np = 0;
         }
         // reading the encoder
@@ -909,22 +918,22 @@ static void generalControlTask(void *pvParameters) {
         // computing the current reference depending of the current command
         computeReference();
 
-        // computing the general controlled
 
         // computing the general controlled
-        if (typeControl == GENERAL_CONTROLLER_SPEED){
-            usat = computeController(5, false);
+        if (typeControl == GENERAL_CONTROLLER){
+            u = computeController(5-deadzone, false);
+
         }
-        else if (typeControl == GENERAL_CONTROLLER_SPEED_2P) {
-            usat = computeController(5, true);
+        else if (typeControl == GENERAL_CONTROLLER_2P) {
+            u = computeController(5-deadzone, true);
         }
+
 
 
         // Compensation of dead zone for the DC motor
         usat = compDeadZone(u, deadzone);
         // sending the control signal to motor
         voltsToMotor(usat);
-        y_ant = y;
         //The task is suspended while awaiting a new sampling time
         vTaskDelayUntil(&xLastWakeTime, taskPeriod);
         np +=1;
