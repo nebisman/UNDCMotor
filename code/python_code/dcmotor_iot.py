@@ -12,6 +12,7 @@ from pathlib import Path
 import csv
 import matplotlib.pyplot as plt
 import matplotlib
+from scipy.signal import cont2discrete
 matplotlib.use("TkAgg", force=True)
 
 
@@ -515,78 +516,131 @@ def stairs_closed(system, stairs=[40, 50, 60], duration= 2, filepath = PATH + "D
 
 
 def set_controller(system, controller, output='angle', deadzone=0.2):
+    topic_pub = system.codes["USER_SYS_SET_GENCON"]
+    sampling_time = system.codes["MOTOR_SAMPLING_TIME"]
+    struct = len(controller.den[0])
 
+    if (output == "angle") & (struct == 1):
+        type_control = 2
+    elif (output == "speed") & (struct == 1):
+        type_control = 3
+    elif (output == "angle") & (struct == 2):
+        type_control = 4
+    elif (output == "speed") & (struct == 2):
+        type_control = 5
+    else:
+        raise ValueError("valid value for output is 'angle' or 'speed'")
 
+    if struct == 1:
+        con = ct.tf(ct.tf(controller.num[0][0], controller.den[0][0]))
+        N1, D1 = ct.tfdata(con)
+        N1 = N1[0][0]
+        D1 = D1[0][0]
+        N1 = N1 / D1[0]
+        D1 = D1 / D1[0]
 
-    def set_controller(system, controller):
-
-        topic_pub = system.codes["USER_SYS_SET_GENCON"]
-        sampling_time = system.codes["MOTOR_SAMPLING_TIME"]
-        struct = len(controller.den[0])
-
-        if (output == "angle") & (struct == 1):
-            type_control = 2
-        elif (output == "speed") & (struct == 1):
-            type_control = 3
-        elif (output == "angle") & (struct == 2):
-            type_control = 4
-        elif (output == "speed") & (struct == 2):
-            type_control = 5
+        if len(N1) == len(D1):
+            d1 = N1[0]
+            N1 = N1 - d1* D1
+            N1 = N1[1:]
         else:
-            raise ValueError("valid value for output is 'angle' or 'speed'")
+            d1 = 0
+
+        DB = np.array([-D1[1:]])
+        DB = DB.T
+        size = len(D1)-2
+        In_1 = np.eye(size)
+        ZR = np.zeros((1,size))
+        Acon = np.block([[In_1], [ZR]])
+        Acon = np.block([DB, Acon])
+        Bcon = np.array([N1]).T
+        Ccon = np.append([1], ZR)
+        Dcon = np.array([d1])
 
 
-        if struct == 1:
-            A1, B1, C1, D1 = ct.ssdata(controller)
-            Ad, Bd, Cd, Dd, dt = cont2discrete((A1, B1, C1, D1), sampling_time, method='bilinear')
 
-        elif struct == 2:
-            A1, B1, C1, D1 = ct.ssdata(ct.tf(controller.num[0][0], controller.den[0][0]))
-            A2, B2, C2, D2 = ct.ssdata(ct.tf(controller.num[0][1], controller.den[0][1]))
-            A2P = A1.T
-            B2P = np.block([C1.T, C2.T])
-            C2P = B1.T
-            D2P = np.block([D1, D2])
-            Ad, Bd, Cd, Dd, dt = cont2discrete((A2P, B2P, C2P, D2P), sampling_time, method='bilinear')
+    elif struct == 2:
+        con1 = ct.tf(ct.tf(controller.num[0][0], controller.den[0][0]))
+        con2 = ct.tf(ct.tf(controller.num[0][1], controller.den[0][1]))
+        N1, D1 = ct.tfdata(con1)
+        N2, D2 = ct.tfdata(con2)
+        N1 = N1[0][0]
+        D1 = D1[0][0]
+        N1 = N1 / D1[0]
+        D1 = D1 / D1[0]
+        N2 = N2[0][0]
+        D2 = D2[0][0]
+        N2 = N2 / D2[0]
+        D2 = D2/ D2[0]
 
-        Cve = ct.ss(Ad, Bd, Cd, Dd, dt=sampling_time)
-        Ai, Bi, Ci, Di = Cve.A, Cve.B[:, 0], Cve.C, Cve.D[0][0]
-        int_system = ct.ss(Ai, Bi, Ci, Di)
-        int_system, T = ct.canonical_form(int_system)
-        Cve = ct.similarity_transform(Cve, T)
-        A = Cve.A
-        B = Cve.B
-        Cc = Cve.C
-        Dc = Cve.D
-        order = np.size(A, 0)
-        In = np.diag([100 for i in range(order)])
-        L, S, E = ct.dlqr(np.transpose(A), np.transpose(Cc), In, 1)
-        L = np.transpose(L)
-        Ac = A - L * Cc
-        Bc = B - L * Dc
-        if struct == 1:
-            Bc = np.block([Bc, -Bc])
-            Dc = np.array([[Dc[0][0], -Dc[0][0]]])
-        A_hex = matrix2hex(Ac)
-        B_hex = matrix2hex(Bc)
-        C_hex = matrix2hex(Cc)
-        D_hex = matrix2hex(Dc)
-        L_hex = matrix2hex(L)
-        order_hex = long2hex(order)
-        type_control_hex = long2hex(type_control)
-        message = json.dumps({"order": order_hex,
-                              "A": A_hex,
-                              "B": B_hex,
-                              "C": C_hex,
-                              "D": D_hex,
-                              "L": L_hex,
-                              "typeControl": type_control_hex,
-                              })
+        if len(N1) == len(D1):
+            d1 = N1[0]
+            N1 = N1 - d1* D1
+            N1 = N1[1:]
+        else:
+            d1 = 0
 
-        system.connect()
-        system.publish(topic_pub, message)
-        system.disconnect()
-        return
+        if len(N2) == len(D2):
+            d2 = N2[0]
+            N2 = N2 - d2* D2
+            N2 = N2[1:]
+        else:
+            d2 = 0
+
+        DB = np.array([-D1[1:]])
+        DB = DB.T
+        size = len(D1)-2
+        In_1 = np.eye(size)
+        ZR = np.zeros((1,size))
+        Acon = np.block([[In_1], [ZR]])
+        Acon = np.block([DB, Acon])
+        B1 = np.array([N1]).T
+        B2 = np.array([N2]).T
+        Bcon = np.block([B1,B2])
+        Ccon = np.append([1], ZR)
+        Dcon = np.block([d1, d2])
+
+    Ad, Bd, Cd, Dd, dt = cont2discrete((Acon, Bcon, Ccon, Dcon), sampling_time, method='bilinear')
+    Cve = ct.ss(Ad, Bd, Cd, Dd)
+    Ai, Bi, Ci, Di = Cve.A, Cve.B[:, 0], Cve.C, Cve.D[0][0]
+    int_system = ct.ss(Ai, Bi, Ci, Di)
+    int_system, T = ct.canonical_form(int_system)
+    Cve = ct.similarity_transform(Cve, T)
+    A = Cve.A
+    B = Cve.B
+    Cc = Cve.C
+    Dc = Cve.D
+    order = np.size(A, 0)
+    In = np.diag([10000 for i in range(order)])
+    L, S, E = ct.dlqr(np.transpose(A), np.transpose(Cc), In, 1)
+    L = np.transpose(L)
+    Ac = A - L * Cc
+    Bc = B - L * Dc
+    if struct == 1:
+        Bc = np.block([Bc, -Bc])
+        Dc = np.array([[Dc[0][0], -Dc[0][0]]])
+    A_hex = matrix2hex(Ac)
+    B_hex = matrix2hex(Bc)
+    C_hex = matrix2hex(Cc)
+    D_hex = matrix2hex(Dc)
+    L_hex = matrix2hex(L)
+    order_hex = long2hex(order)
+    deadzone_hex = float2hex(deadzone)
+    type_control_hex = long2hex(type_control)
+    message = json.dumps({"order": order_hex,
+                          "A": A_hex,
+                          "B": B_hex,
+                          "C": C_hex,
+                          "D": D_hex,
+                          "L": L_hex,
+                          "typeControl": type_control_hex,
+                          "deadzone": deadzone_hex
+                          })
+
+    system.connect()
+    system.publish(topic_pub, message)
+    system.disconnect()
+    return
 
 
 
