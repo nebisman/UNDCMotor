@@ -124,6 +124,6 @@ const uint64_t pbrsSignal[32] = {
 
 /// Definitions for dead zone
 
-# define DEAD_ZONE 0.1
+# define DEAD_ZONE 0.2
 
 

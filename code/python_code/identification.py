@@ -15,7 +15,7 @@ from pathlib import Path
 
 
 PBRS_LENGTH = 1023
-global currfig
+
 def read_csv_file3(filepath=PATH + 'DCmotor_prbs_open_exp.csv'):
     with open(filepath , newline='') as file:
         reader = csv.reader(file)
@@ -151,16 +151,6 @@ def step_open(system, u0=1.5, u1=3.5, t0=1, t1=1, filepath = r"./experiment_file
     for ind in range(len(y)):
         exp.append([t[ind], u[ind], y[ind]])
 
-        # for ind in range(len(yframe)):
-        #     y.append(yframe[ind])
-        #     u.append(uframe[ind])
-        #     t.append(tframe[ind])
-        #     exp.append([tframe[ind], uframe[ind], yframe[ind]])
-        #     line_u.set_data(t, u)
-        #     line_y.set_data(t, y)
-        #     plt.draw()
-        #     plt.pause(sampling_time)
-    #plt.close()
     np.savetxt(filepath, exp, delimiter=",",
                 fmt="%0.8f", comments="", header='t,u,y')
     system.disconnect()
@@ -575,7 +565,7 @@ def get_fomodel_step(system, yop = 400):
     return G
 
 
-def get_models_pbrs(system, yop = 100, usefile = False):
+def get_models_prbs(system, yop = 100, usefile = False):
 
     norm = np.linalg.norm
 
@@ -594,8 +584,6 @@ def get_models_pbrs(system, yop = 100, usefile = False):
         G = alpha / (( tau1*s + 1)*(tau2*s + 1))
         tsim, ysim = ct.forced_response(G, t, um)
         return G, ysim
-
-
 
     def objective_fo(x):
         # simulate model
@@ -625,7 +613,7 @@ def get_models_pbrs(system, yop = 100, usefile = False):
         ub = system.volts_from_speed(-50)
     elif 0 <= yop < 200:
         ua = system.volts_from_speed(200)
-        ub = system.volts_from_speed(20)
+        ub = system.volts_from_speed(50)
     elif 200 <= yop < ymax - sigma:
         ua = system.volts_from_speed(yop + sigma)
         ub = system.volts_from_speed(yop - sigma)
@@ -742,7 +730,7 @@ def get_models_pbrs(system, yop = 100, usefile = False):
     return G1, G2
 
 
-def read_models_pbrs():
+def read_models_prbs():
     with open(PATH + 'DCmotor_fo_model_pbrs.csv', newline='') as file:
         reader = csv.reader(file)
         # Iterate over each row in the CSV file
@@ -776,6 +764,6 @@ def read_models_pbrs():
 
 if __name__ == "__main__":
     motor1 = MotorSystemIoT()
-    G1, G2 = get_models_pbrs(motor1, 50, usefile=False)
+    G1, G2 = get_models_pbrs(motor1, 400, usefile=False)
     print(G1, G2)
 
