@@ -1,17 +1,18 @@
 import control as ct
 from dcmotor_iot import MotorSystemIoT, PATH, long2hex, float2hex, hex2long, hexframe_to_array
 from scipy.interpolate import PchipInterpolator
-import matplotlib
 import numpy as np
 from time import sleep
-matplotlib.use("TkAgg", force=True)
 import csv
 import matplotlib.pyplot as plt
 from scipy import optimize
-import math
+from math import ceil
 from queue import Queue
 import json
 from pathlib import Path
+
+import matplotlib
+matplotlib.use("TkAgg", force=True)
 
 
 PBRS_LENGTH = 1023
@@ -34,10 +35,6 @@ def read_csv_file3(filepath=PATH + 'DCmotor_prbs_open_exp.csv'):
 
 
 
-
-
-
-#
 def step_open(system, u0=1.5, u1=3.5, t0=1, t1=1, filepath = r"./experiment_files/DCmotor_step_open_exp.csv"):
     def step_message(system, userdata, message):
         q.put(message)
@@ -52,13 +49,12 @@ def step_open(system, u0=1.5, u1=3.5, t0=1, t1=1, filepath = r"./experiment_file
     sampling_time = system.codes["MOTOR_SAMPLING_TIME"]
     buffer = system.codes["BUFFER_SIZE"]
 
-
     # setting the parameters of the step response for sending to ESP32
 
     points_high = round(high_time / sampling_time) + 1
     points_low = round(low_time / sampling_time)
     total_points = points_low + points_high
-    frames = math.ceil(total_points / buffer)
+    frames = ceil(total_points / buffer)
     points_low_hex = long2hex(points_low)
     points_high_hex = long2hex(points_high)
     low_val_hex = float2hex(low_val)
@@ -159,7 +155,7 @@ def step_open(system, u0=1.5, u1=3.5, t0=1, t1=1, filepath = r"./experiment_file
 
 
 
-def pbrs_open(system, low_val = 2, high_val = 4, divider = 2,  filepath = r"./experiment_files/DCmotor_prbs_open_exp.csv"):
+def prbs_open(system, low_val = 2, high_val = 4, divider = 2,  filepath = r"./experiment_files/DCmotor_prbs_open_exp.csv"):
     def pbrs_message(system, userdata, message):
         q.put(message)
 
@@ -178,7 +174,7 @@ def pbrs_open(system, low_val = 2, high_val = 4, divider = 2,  filepath = r"./ex
     total_points = PBRS_LENGTH * divider
 
     # setting the parameters of the step response for sending to ESP32
-    frames = math.ceil(total_points/buffer)
+    frames = ceil(total_points/buffer)
     low_val_hex = float2hex(low_val)
     high_val_hex = float2hex(high_val)
     divider_hex = long2hex(divider)
@@ -324,7 +320,7 @@ def step_open_staticgain(system, low_val=1.5, high_val=3.5, low_time=1, high_tim
     points_high = round(high_time / sampling_time) + 1
     points_low = round(low_time / sampling_time)
     total_points = points_low + points_high
-    frames = math.ceil(total_points / buffer)
+    frames = ceil(total_points / buffer)
     points_low_hex = long2hex(points_low)
     points_high_hex = long2hex(points_high)
     low_val_hex = float2hex(low_val)
@@ -626,7 +622,7 @@ def get_models_prbs(system, yop = 100, usefile = False):
     if usefile:
         t,u,y = read_csv_file3(filepath=PATH + 'DCmotor_prbs_open_exp.csv')
     else:
-        t, u, y = pbrs_open(system, low_val= ua , high_val = ub, divider=4)
+        t, u, y = prbs_open(system, low_val= ua , high_val = ub, divider=4)
     plt.close(1)
     ya = system.speed_from_volts(ua)
     yb = system.speed_from_volts(ub)
@@ -764,6 +760,6 @@ def read_models_prbs():
 
 if __name__ == "__main__":
     motor1 = MotorSystemIoT()
-    G1, G2 = get_models_pbrs(motor1, 400, usefile=False)
+    G1, G2 = get_models_prbs(motor1, 100)
     print(G1, G2)
 
