@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "unmotor"
 authors = [{name = "Leonardo Bermeo", email = "lbermeoc@unal.edu.co"}]
-description = "undcmotor is a package designed for interacting with a physical thermal plant via IoT technology."
+description = "undcmotor is a package designed for interacting with DC motor via IoT technology."
 version = "0.1.13"
 readme = "README.md"
 
@@ -28,4 +28,4 @@ include = ["*.csv"]
 
 
 [project.urls]
-Homepage = "https://github.com/nebisman/UNThermal.git"
+Homepage = "https://github.com/nebisman/UNDCMotor.git"
