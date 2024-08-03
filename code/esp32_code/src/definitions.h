@@ -33,11 +33,16 @@
 // This is the definition for the two cores of ESP32
 #define CORE_CONTROL 1   // Core 0 is used for control tasks
 #define CORE_COMM    0   // Core 1 is used for mqtt communication
-//
+
+// These are the protection pins for the driver
+#define DRIVER_ON 21
+
+
 
 
 // System definitions
 #define DEFAULT_REFERENCE 0
+
 
 
 // IOT topic definitions
@@ -124,6 +129,6 @@ const uint64_t pbrsSignal[32] = {
 
 /// Definitions for dead zone
 
-# define DEAD_ZONE 0.2
+# define DEAD_ZONE 0
 
 

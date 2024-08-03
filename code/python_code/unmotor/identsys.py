@@ -1,15 +1,24 @@
-import control as ct
-from dcmotor_iot import MotorSystemIoT, PATH, long2hex, float2hex, hex2long, hexframe_to_array
-from scipy.interpolate import PchipInterpolator
-import numpy as np
-from time import sleep
-import csv
+# Required libraries
+
 import matplotlib.pyplot as plt
-from scipy import optimize
+import numpy as np
+from scipy.integrate import odeint
+from scipy.optimize import minimize
+from scipy.interpolate import interp1d, PchipInterpolator
+
+from scipy.stats import linregress
+import control as ct
+from .motorsys import MotorSystemIoT, PATH_DATA, PATH_DEFAULT, FONT_SIZE
+from .controlsys import  long2hex, float2hex, hex2long, set_pid, hex2float, hexframe_to_array
+import json
 from math import ceil
 from queue import Queue
-import json
 from pathlib import Path
+import csv
+from pathlib import Path
+import time
+
+
 
 import matplotlib
 matplotlib.use("TkAgg", force=True)
@@ -17,8 +26,8 @@ matplotlib.use("TkAgg", force=True)
 
 PBRS_LENGTH = 1023
 
-def read_csv_file3(filepath=PATH + 'DCmotor_prbs_open_exp.csv'):
-    with open(filepath , newline='') as file:
+def read_csv_file3(filepath):
+    with open(filepath, newline='') as file:
         reader = csv.reader(file)
         # Iterate over each row in the CSV file
         num_line = 0
@@ -35,7 +44,7 @@ def read_csv_file3(filepath=PATH + 'DCmotor_prbs_open_exp.csv'):
 
 
 
-def step_open(system, u0=1.5, u1=3.5, t0=1, t1=1, filepath = r"./experiment_files/DCmotor_step_open_exp.csv"):
+def step_open(system, u0=1.5, u1=3.5, t0=1, t1=1):
     def step_message(system, userdata, message):
         q.put(message)
     # reading the configuration parameters from the
@@ -102,13 +111,13 @@ def step_open(system, u0=1.5, u1=3.5, t0=1, t1=1, filepath = r"./experiment_file
 
 
     line_u, = uax.plot(t, u, drawstyle='steps-post', color="#338000")
-    line_y, = yax.plot(t, y, drawstyle='steps-post',  color="#d40055")
+    line_y, = yax.plot(t, y,  color="#d40055")
 
     #Setting the limits of figure
     pu = 0.1
     ulimits = [low_val, high_val]
     ylimits = system.speed_from_volts(ulimits)
-    ylimits = [np.min(ylimits), np.max(ylimits)]
+    ylimits = [np.min(ylimits)-20, np.max(ylimits)]
     ulimits = [np.min(ulimits), np.max(ulimits)]
     delta_u = ulimits[1] - ulimits[0]
     uax.set_ylim(ulimits[0] - pu*delta_u, ulimits[1] + pu*delta_u)
@@ -147,15 +156,18 @@ def step_open(system, u0=1.5, u1=3.5, t0=1, t1=1, filepath = r"./experiment_file
     for ind in range(len(y)):
         exp.append([t[ind], u[ind], y[ind]])
 
-    np.savetxt(filepath, exp, delimiter=",",
+    np.savetxt(PATH_DATA + "DCmotor_step_open_exp.csv", exp, delimiter=",",
+                fmt="%0.8f", comments="", header='t,u,y')
+    np.savetxt(PATH_DEFAULT + "DCmotor_step_open_exp.csv", exp, delimiter=",",
                 fmt="%0.8f", comments="", header='t,u,y')
     system.disconnect()
+    plt.show()
     return t, u, y
 
 
 
 
-def prbs_open(system, low_val = 2, high_val = 4, divider = 2,  filepath = r"./experiment_files/DCmotor_prbs_open_exp.csv"):
+def prbs_open(system, low_val = 2, high_val = 4, divider = 2):
     def pbrs_message(system, userdata, message):
         q.put(message)
 
@@ -296,7 +308,9 @@ def prbs_open(system, low_val = 2, high_val = 4, divider = 2,  filepath = r"./ex
         exp.append([t[ind],  u[ind], y[ind]])
 
     # Saving the results of the experiment, stored in list 'exp', in the given filepath
-    np.savetxt(filepath, exp, delimiter=",",
+    np.savetxt(PATH_DATA + 'DCmotor_prbs_open_exp.csv', exp, delimiter=",",
+                fmt="%0.8f", comments="", header='t,u,y')
+    np.savetxt(PATH_DEFAULT + 'DCmotor_prbs_open_exp.csv', exp, delimiter=",",
                 fmt="%0.8f", comments="", header='t,u,y')
     system.disconnect()
     return t, u, y
@@ -389,16 +403,17 @@ def get_static_model(system):
 
     ax.grid(True);
     ax.set_facecolor('#f4eed7')
+    ax.set_yticks(np.arange(-700, 800, 100))
     ax.set_xticks([-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5])
     ax.grid(color='#1a1a1a40', linestyle='--', linewidth=0.25)
-    line_exp, = ax.plot(uee, yee, color="#00aa00", linewidth=1.5)
+    line_exp, = ax.plot(uee, yee, color="#00aa00", linewidth=1.5, marker=r"$\circ$", markeredgewidth=0.1)
     ax.set_xlim(-5, 5)
     ax.set_ylim(-780, 780)
     plt.draw()
 
     # These are the parameters for obtaining the actuator response
     timestep = 3
-    points = 30
+    points = 20
     dz_point = 0.32
 
     # # This is the set of step responses for obtaining steady state in speed
@@ -408,7 +423,13 @@ def get_static_model(system):
     u_tot = np.concatenate((u_neg, u_pos))
     exp = []
     for ui in u_tot:
-        u, y = step_open_staticgain(system, 0, ui,0, timestep)
+        try:
+            u, y = step_open_staticgain(system, 0, ui,0, timestep)
+        except:
+            time.sleep(2)
+            u, y = step_open_staticgain(system, 0, ui, 0, timestep)
+
+
         yf = np.mean(y[-50:])
         uf = u[-1]
         exp.append([uf, yf])
@@ -418,9 +439,12 @@ def get_static_model(system):
         plt.draw()
         plt.pause(0.1)
 
-    Path(PATH).mkdir(exist_ok=True)
-    np.savetxt(PATH + "DCmotor_static_gain_response.csv", exp, delimiter=",", fmt="%0.8f", comments="", header='u,y')
+    np.savetxt(PATH_DEFAULT + "DCmotor_static_gain_response.csv",
+               exp, delimiter=",", fmt="%0.8f", comments="", header='u,y')
+    np.savetxt(PATH_DATA + "DCmotor_static_gain_response.csv",
+               exp, delimiter=",", fmt="%0.8f", comments="", header='u,y')
     system.disconnect()
+    print("Static model esperiment has been completed")
     return
 
 
@@ -556,7 +580,9 @@ def get_fomodel_step(system, yop = 400):
     plt.show()
     Path(PATH).mkdir(exist_ok=True)
     exp = [[alpha, tau]]
-    np.savetxt(PATH + "DCmotor_fomodel_step.csv", exp, delimiter=",", fmt="%0.8f", comments="", header='alpha, tau')
+    np.savetxt(PATH_DATA + "DCmotor_fomodel_step.csv", exp, delimiter=",", fmt="%0.8f", comments="", header='alpha, tau')
+    np.savetxt(PATH_DEFAULT + "DCmotor_fomodel_step.csv", exp, delimiter=",", fmt="%0.8f", comments="",
+               header='alpha, tau')
     system.disconnect()
     return G
 
@@ -619,10 +645,14 @@ def get_models_prbs(system, yop = 100, usefile = False):
     else:
         raise ValueError(f"The maximum speed for this motor is {ymax:.2f} \n\t\t\t and the minimum is {ymin:.2f} ")
 
-    if usefile:
-        t,u,y = read_csv_file3(filepath=PATH + 'DCmotor_prbs_open_exp.csv')
-    else:
-        t, u, y = prbs_open(system, low_val= ua , high_val = ub, divider=4)
+
+    if not usefile:
+        try:
+            prbs_open(system, low_val=ua, high_val=ub, divider=2)
+        except:
+            raise TimeoutError("The connection has been lost. Please try again")
+
+    t, u, y = read_csv_file3(PATH_DATA + 'DCmotor_prbs_open_exp.csv')
     plt.close(1)
     ya = system.speed_from_volts(ua)
     yb = system.speed_from_volts(ub)
@@ -650,7 +680,7 @@ def get_models_prbs(system, yop = 100, usefile = False):
 
     # Now we run the optimization algorithm
     print(f'Starting optimization for first order model...\n\t Initial cost function: {objective_fo(x01):.2f}' )
-    solution = optimize.minimize(objective_fo, x0=x01, bounds= bounds1)
+    solution = minimize(objective_fo, x0=x01, bounds= bounds1)
     xmin = solution.x
     alpha, tau = xmin
     fmin = objective_fo(xmin)
@@ -662,7 +692,7 @@ def get_models_prbs(system, yop = 100, usefile = False):
     r1 = 100*(1 - norm(ym - ysim1) / norm(ym))
 
     print(f'\n\nStarting optimization for second order model...\n\t Initial cost function: {objective_so(x02):.2f}' )
-    solution = optimize.minimize(objective_so, x0=x02, bounds= bounds2)
+    solution = minimize(objective_so, x0=x02, bounds= bounds2)
     xmin = solution.x
     alpha2, tau1, tau2 = xmin
     fmin = objective_so(xmin)
@@ -684,7 +714,7 @@ def get_models_prbs(system, yop = 100, usefile = False):
     ay.grid(True)
     ay.grid(color='#1a1a1a40', linestyle='--', linewidth=0.125)
     ay.set_facecolor('#f4eed7')
-    xlimits = [60, t[-1]]
+    xlimits = [t[-1]-20, t[-1]]
     ay.set_xlim(xlimits[0], xlimits[1])
     ay.set_ylabel('Speed (Degrees/s)')
 
@@ -710,16 +740,15 @@ def get_models_prbs(system, yop = 100, usefile = False):
     ay.legend([line_exp, line_model1, line_model2], ['Data', modelstr1, modelstr2],
               fontsize=14, loc = 'lower right',framealpha=0.95)
     au.legend([line_u], ['PRBS Input'], fontsize=14)
-    PATH1 = r'/home/leonardo/sharefolder/ProyectoSabatico/Reporte/figures/'
-    plt.savefig(PATH1 + "DCmotor_pbrs.svg", format="svg", bbox_inches="tight")
+    # PATH1 = r'/home/leonardo/sharefolder/ProyectoSabatico/Reporte/figures/'
+    # plt.savefig(PATH1 + "DCmotor_pbrs.svg", format="svg", bbox_inches="tight")
     plt.show()
-    Path(PATH).mkdir(exist_ok=True)
     fo_model = [[alpha, tau]]
     so_model = [[alpha2, tau1, tau2]]
-    np.savetxt(PATH + "DCmotor_fo_model_pbrs.csv", fo_model, delimiter=",",
+    np.savetxt(PATH_DATA + "DCmotor_fo_model_pbrs.csv", fo_model, delimiter=",",
                fmt="%0.8f", comments="", header='alpha, tau')
 
-    np.savetxt(PATH + "DCmotor_so_model_pbrs.csv", so_model, delimiter=",",
+    np.savetxt(PATH_DEFAULT + "DCmotor_so_model_pbrs.csv", so_model, delimiter=",",
                fmt="%0.8f", comments="", header='alpha2, tau1, tau2')
 
     system.disconnect()
@@ -727,7 +756,7 @@ def get_models_prbs(system, yop = 100, usefile = False):
 
 
 def read_models_prbs():
-    with open(PATH + 'DCmotor_fo_model_pbrs.csv', newline='') as file:
+    with open(PATH_DATA + 'DCmotor_fo_model_pbrs.csv', newline='') as file:
         reader = csv.reader(file)
         # Iterate over each row in the CSV file
         num_line = 0
@@ -740,7 +769,7 @@ def read_models_prbs():
     a = 1 / tau
     G1 = ct.tf(b, [1, a])
 
-    with open(PATH + 'DCmotor_so_model_pbrs.csv', newline='') as file:
+    with open(PATH_DATA + 'DCmotor_so_model_pbrs.csv', newline='') as file:
         reader = csv.reader(file)
         # Iterate over each row in the CSV file
         num_line = 0
@@ -760,6 +789,5 @@ def read_models_prbs():
 
 if __name__ == "__main__":
     motor1 = MotorSystemIoT()
-    G1, G2 = get_models_prbs(motor1, 100)
-    print(G1, G2)
+    get_models_prbs(motor1)
 

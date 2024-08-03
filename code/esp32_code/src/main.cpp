@@ -270,7 +270,7 @@ void displayLed(float var, float valmin, float valmax, float percent, uint8_t  l
 void displayWhite() {
 uint32_t color = dispLed.Color(255, 255,255);
 dispLed.setPixelColor(0, color );
-dispLed.setBrightness(40);
+dispLed.setBrightness(20);
 dispLed.show();
 }
 
@@ -317,10 +317,10 @@ void resumeControl(){
 void defaultControl(){
     codeTopic = DEFAULT_TOPIC;
     reset_int = true;
-    resumeControl();
     vTaskSuspend(h_publishStateTask);
-    vTaskSuspend(h_identifyTask);
-    vTaskSuspend(h_stepOpenTask);
+//    vTaskSuspend(h_identifyTask);
+//    vTaskSuspend(h_stepOpenTask);
+    resumeControl();
 }
 
 // These functions handle the WiFi and mqtt communication
@@ -805,14 +805,14 @@ static void controlPidTask(void *pvParameters) {
         u = P + I +  D ; // control signal
         e = reference - y;
         v = (y - y_ant)/h;
-        if ((abs(e) <= 0.23) & (abs(v) <= 10)){
+        if ((abs(e) <= 0.25) & (abs(v) <= 20)){
             u=0;
              }
 
 
 
         //saturated control signal
-        usat = constrain(u, -5 + deadzone, 5 - deadzone);
+        usat =  constrain(u, -5 + deadzone, 5 - deadzone);
         voltsToMotor(compDeadZone(usat, deadzone));
 
         // updating integral action
@@ -825,7 +825,7 @@ static void controlPidTask(void *pvParameters) {
         if (reset_int) {I=0;}
         //The task is suspended while awaiting a new samplig time
         vTaskDelayUntil(&xLastWakeTime, taskPeriod);
-        np +=1;
+        np += 1;
     }
 }
 
@@ -1037,6 +1037,7 @@ const TickType_t taskPeriod = (uint32_t) (1000 * h);
             voltsToMotor(0);
             printf("Open loop PBRS response completed\n");
             defaultControl();
+            vTaskSuspend(h_identifyTask);
         }
         vTaskDelayUntil(&xLastWakeTime, taskPeriod);
         np +=1;
@@ -1058,7 +1059,7 @@ static void stepOpenTask(void *pvParameters) {
             vTaskDelay(pdMS_TO_TICKS(1000));
             if (low_val != 0) {
                 voltsToMotor(low_val);
-                vTaskDelay(pdMS_TO_TICKS(2000));
+                vTaskDelay(pdMS_TO_TICKS(1000));
             }
             reset_int = false;
             np = 0;
@@ -1087,6 +1088,7 @@ static void stepOpenTask(void *pvParameters) {
             voltsToMotor( 0);
             printf("Open loop step response completed\n");
             defaultControl();
+            vTaskSuspend(h_stepOpenTask);
 
         }
         vTaskDelayUntil(&xLastWakeTime, taskPeriod);
@@ -1116,6 +1118,8 @@ void setup() {
 
     pinMode( CH_ENC_A_POT, INPUT_PULLUP);
     pinMode( CH_ENC_B_POT, INPUT_PULLUP);
+    pinMode(DRIVER_ON, OUTPUT);
+    digitalWrite(DRIVER_ON, HIGH);
     encoderPot.attachFullQuad(CH_ENC_A_POT, CH_ENC_B_POT);
     encoderPot.clearCount();
     encoderPot.setFilter(1023);
@@ -1230,8 +1234,4 @@ void setup() {
 
 void loop() {
     vTaskDelete(nullptr);
-
-//    h = encoderPot.getCount();
-//       printf("y= %0.2f\n    ref =%0.2f", y, reference);
-//       vTaskDelay(500);
 }
