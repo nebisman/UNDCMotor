@@ -1,152 +1,19 @@
 # Required libraries
-from time import sleep
+
+import matplotlib.pyplot as plt
 import numpy as np
-from scipy.interpolate import PchipInterpolator
-import paho.mqtt.client as mqtt
+from pathlib import Path
 import control as ct
 import struct
 from queue import Queue
-import math
+from math import ceil
 import json
-from pathlib import Path
-import csv
-import matplotlib.pyplot as plt
-import matplotlib
+import time
 from scipy.signal import cont2discrete
+from .motorsys import MotorSystemIoT, PATH_DATA, PATH_DEFAULT, FONT_SIZE, read_csv_file
+import matplotlib
 matplotlib.use("TkAgg", force=True)
 
-
-# These are the parameters of communication
-
-#BROKER = "broker.hivemq.com"
-BROKER = "192.168.0.3"
-#BROKER = "18.204.70.207" # amazon mosquitto broker
-PORT = 1883
-USER = "hpdesktop"
-PASSWORD = "hpdesktop"
-
-
-
-
-#topics for subscription
-
-PLANT_NUMBER = "5678"
-codes ={"SYS_USER_SIGNALS_CLOSED"  : "/motor/motor_" + PLANT_NUMBER + "/user/sig_closed",
-        "SYS_USER_SIGNALS_OPEN"  : "/motor/motor_" + PLANT_NUMBER + "/user/sig_open",
-        "USER_SYS_SET_REF"  : "/motor/user/motor_" + PLANT_NUMBER + "/set_ref",
-        "USER_SYS_SET_PID"  : "/motor/user/motor_" + PLANT_NUMBER  + "/set_pid",
-        "USER_SYS_STEP_CLOSED": "/motor/user/motor_" + PLANT_NUMBER +"/step_closed",
-        "USER_SYS_STAIRS_CLOSED": "/motor/user/motor_" + PLANT_NUMBER + "/stairs_closed",
-        "USER_SYS_PRBS_OPEN": "/motor/user/motor_" + PLANT_NUMBER + "/prbs_open",
-        "USER_SYS_STEP_OPEN": "/motor/user/motor_" + PLANT_NUMBER + "/step_open",
-        "USER_SYS_SET_GENCON": "/motor/user/motor_" + PLANT_NUMBER + "/set_gencon",
-        "USER_SYS_PROFILE_CLOSED": "/motor/user/motor_" + PLANT_NUMBER + "/prof_closed",
-        "MOTOR_SAMPLING_TIME" : 0.02,
-        "BUFFER_SIZE" : 25,
-        }
-
-
-
-PATH = r"./experiment_files/"
-
-
-
-""" This is the class defining the IoT motor system"""
-class MotorSystemIoT:
-
-    def __init__(self, broker_address = BROKER, port= PORT, client_id="", clean_session=True):
-        self.client = mqtt.Client()
-        self.broker_address = broker_address
-        self.port = port
-        self.client.on_connect = self.on_connect
-        self.client.on_disconnect = self.on_disconnect
-        self.client.on_message = self.on_message
-        self.client.on_subscribe = self.on_subscribe
-        self.client.on_publish = self.on_publish
-        self.codes = codes
-
-
-    def on_connect(self, client, userdata, flags, rc):
-        if rc == 0:
-            print("Connected successfully to MQTT Broker!")
-        else:
-            print("Failed to connect, return code %d\n", rc)
-
-    def on_disconnect(self, client, userdata, rc):
-        if rc != 0:
-            print("Unexpected disconnection.")
-
-    def on_message(self, client, userdata, message):
-        return
-        #pass
-        #print(f"Received  '{message.payload.decode()}'")
-
-    def on_subscribe(self, client, userdata, mid, granted_qos):
-        return
-        #print("Subscribed: ", mid, " ", granted_qos)
-
-    def on_publish(self, client, userdata, mid):
-        return
-
-        #print("Message Published: ", mid)
-
-    def connect(self):
-        self.client.username_pw_set(USER, PASSWORD)
-        self.client.connect(self.broker_address, self.port)
-        self.client.loop_start()
-
-    def disconnect(self):
-        self.client.loop_stop()
-        self.client.disconnect()
-
-    def subscribe(self, topic, qos=2):
-        self.client.subscribe(topic, qos)
-
-    def publish(self, topic, message, qos=1):
-        self.client.publish(topic, message, qos)
-
-    def transfer_function(self, output='position', min_order=True):
-        if output == 'position':
-            if min_order:
-                num = [4369.0278678492]
-                den = [1, 9.97077548888435, 0]
-            else:
-                num = [798289.164111307]
-                den = [1, 187.699939287416, 1803.62183871806, 0]
-
-        elif output == 'velocity':
-            if min_order:
-                num = [4369.0278678492]
-                den = [1, 9.97077548888435]
-            else:
-                num = [798289.164111307]
-                den = [1, 187.699939287416, 1803.62183871806]
-
-        G = ct.tf(num, den)
-        return G
-
-    def speed_from_volts(self, volts = None):
-        if volts == None:
-            raise ValueError("voltage input is required")
-
-        u, y = read_csv_file()
-        interp = PchipInterpolator(u, y)
-        return interp(volts)
-
-    def volts_from_speed(self, speed = None):
-        if speed == None:
-            raise ValueError("speed input is required")
-
-        u, y = read_csv_file()
-        interp = PchipInterpolator(u, y)
-        if speed == 0:
-            uc = 0
-        elif (speed >= y[0]) and (speed <= y[-1]):
-            roots = interp.solve(speed, extrapolate=False)
-            uc = np.mean(roots)
-        else:
-            raise ValueError(f"The speed input must be in the interval {y[0]} to {y[-1]}")
-        return uc
 
 
 
@@ -197,19 +64,19 @@ def hexframe_to_array(hexframe):
     return array
 
 
-def read_csv_file(filepath=PATH + 'static_gain_response.csv'):
-    with open(filepath , newline='') as file:
-        reader = csv.reader(file)
-        # Iterate over each row in the CSV file
-        num_line = 0
-        u = []
-        y = []
-        for row in reader:
-            if num_line != 0:
-               u.append(float(row[0]))
-               y.append(float(row[1]))
-            num_line += 1
-        return u, y
+# def read_csv_file(PATH_DATA):
+#     with open(filepath , newline='') as file:
+#         reader = csv.reader(file)
+#         # Iterate over each row in the CSV file
+#         num_line = 0
+#         u = []
+#         y = []
+#         for row in reader:
+#             if num_line != 0:
+#                u.append(float(row[0]))
+#                y.append(float(row[1]))
+#             num_line += 1
+#         return u, y
 
 
 def set_reference(system, ref_value=50):
@@ -256,7 +123,7 @@ def set_pid(system, kp=1, ki=0.4, kd=0, N=5, beta=1, output = "angle", deadzone 
     return rcode
 
 
-def step_closed(system, r0=0 , r1=100, t0=0 ,  t1=1, filepath = PATH + "DCmotor_step_closed_exp.csv"):
+def step_closed(system, r0=0 , r1=100, t0=0 ,  t1=1):
 
     def step_message(system, userdata, message):
         # This inner function is the callback of the received messages
@@ -279,7 +146,7 @@ def step_closed(system, r0=0 , r1=100, t0=0 ,  t1=1, filepath = PATH + "DCmotor_
     points_high = round(high_time / sampling_time)
     points_low = round(low_time / sampling_time)
     total_points = points_low + points_high
-    frames = math.ceil(total_points/buffer)
+    frames = ceil(total_points/buffer)
     points_low_hex = long2hex(points_low)
     points_high_hex = long2hex(points_high)
     low_val_hex = float2hex(low_val)
@@ -380,14 +247,19 @@ def step_closed(system, r0=0 , r1=100, t0=0 ,  t1=1, filepath = PATH + "DCmotor_
             plt.pause(sampling_time)
 
 
-    np.savetxt(filepath, exp, delimiter=",",
+
+
+
+    np.savetxt(PATH_DATA + "DCmotor_step_closed_exp.csv", exp, delimiter=",",
+                fmt="%0.8f", comments="", header='t,r,y,u')
+    np.savetxt(PATH_DEFAULT + "DCmotor_step_closed_exp.csv", exp, delimiter=",",
                 fmt="%0.8f", comments="", header='t,r,y,u')
     system.disconnect()
     plt.show()
     return t, r, y, u
 
 
-def stairs_closed(system, stairs=[40, 50, 60], duration= 2, filepath = PATH + "DCmotor_stairs_closed_exp.csv"):
+def stairs_closed(system, stairs=[40, 50, 60], duration= 2):
     def stairs_message(system, userdata, message):
         q.put(message)
 
@@ -403,11 +275,12 @@ def stairs_closed(system, stairs=[40, 50, 60], duration= 2, filepath = PATH + "D
     points_stairs = len(stairs)
     points_stairs_hex = long2hex(points_stairs)
     signal_hex = signal2hex(stairs)
-    duration = math.ceil(duration / sampling_time)
+    duration = ceil(duration / sampling_time)
     duration_hex = long2hex(duration)
 
-    min_val = npy.min(stairs)
-    max_val = npy.max(stairs)
+    min_val = np.min(stairs)
+
+    max_val = np.max(stairs)
     min_val_hex = float2hex(min_val)
     max_val_hex = float2hex(max_val)
 
@@ -433,7 +306,7 @@ def stairs_closed(system, stairs=[40, 50, 60], duration= 2, filepath = PATH + "D
 
 
     total_points = points_stairs * duration - 1
-    frames = math.ceil(total_points / buffer)
+    frames = ceil(total_points / buffer)
 
 
     # vectors for storing the results of the experiment
@@ -445,19 +318,29 @@ def stairs_closed(system, stairs=[40, 50, 60], duration= 2, filepath = PATH + "D
 
     # Setting the graphics configuration for visualizing the experiment
 
-    fig, ax = plt.subplots(nrows=2, ncols=1, width_ratios = [1], height_ratios= [4,1], figsize=(16, 9))
-    ax.grid(True);
-    ax.grid(color='gray', linestyle='--', linewidth=0.25)
-    line_r, = ax.plot(t, r, drawstyle='steps-post', color="#338000")
-    line_y, = ax.plot(t, y, drawstyle='steps-post', color="#d40055")
-    ax.set_xlim(0, sampling_time * (total_points - 1))
-    min_val = npy.min(stairs)
-    max_val = npy.max(stairs)
+
+    fig, (ay, au) = plt.subplots(nrows=2, ncols=1, width_ratios=[1], height_ratios=[4, 1], figsize=(10, 6))
+    # settings for the upper axes, depicting the model and speed data
+    ay.set_title(f'Stairs experiment with {len(stairs):d} stairs and a duration of {len(stairs)*duration:0.2f} seconds' )
+    ay.set_ylabel('Degrees/s (or Degrees)')
+    ay.set_xlabel('Time (seconds)')
+    ay.grid(color='#806600ff', linestyle='--', linewidth=0.25)
+    ay.set_facecolor('#f4eed7ff')
+    line_r, = ay.plot(t, r,  color="#005544ff", linewidth=1.25)
+    line_y, = ay.plot(t, y,  color="#d45500ff", linewidth=1.25)
+    ay.legend([line_r, line_y], ['$r(t)$ (reference)', '$y(t)$ (output)'], fontsize=16)
+    ay.set_xlim(0, sampling_time * (total_points - 1))
     spany = max_val - min_val
-    ax.set_ylim( min_val-0.1*abs(spany), max_val + 0.1* spany)
-    line_r.set_data(t, r)
-    line_y.set_data(t, y)
+    ay.set_ylim( min_val-0.1*abs(spany), max_val + 0.1* spany)
+
+    au.set_facecolor('#d7f4e3ff')
+    au.set_ylim(-5.5, 5.5)
+    au.set_xlim(0, total_points*sampling_time)
+    au.grid(color='#008066ff', linestyle='--', linewidth=0.25)
+    line_u, = au.plot(t, u, color="#0066ffff")
+
     plt.draw()
+
 
     # This is the queue of messages filled by the stair_message callback
     q = Queue()
@@ -487,7 +370,7 @@ def stairs_closed(system, stairs=[40, 50, 60], duration= 2, filepath = PATH + "D
         rframe = hexframe_to_array(rframe_hex)
         uframe = hexframe_to_array(uframe_hex)
         yframe = hexframe_to_array(yframe_hex)
-        tframe = sampling_time * (npy.arange(len(rframe)) + (curr_frame - 1) * buffer)
+        tframe = sampling_time * (np.arange(len(rframe)) + (curr_frame - 1) * buffer)
 
         # we plot every single point received in each dataframe
         # and save it in the matrix exp for storing in a csv file
@@ -502,13 +385,15 @@ def stairs_closed(system, stairs=[40, 50, 60], duration= 2, filepath = PATH + "D
             exp.append([tframe[ind], rframe[ind], yframe[ind], uframe[ind]])
             line_r.set_data(t, r)
             line_y.set_data(t, y)
-
+            line_u.set_data(t, u)
             # drawing a new point from the current dataframe
             plt.draw()
             plt.pause(sampling_time)
 
     # Now, we save the results of the experiment in the provided filepath
-    npy.savetxt(filepath, exp, delimiter=",",
+    np.savetxt(PATH_DATA + "DCmotor_stairs_closed_exp.csv", exp, delimiter=",",
+                fmt="%0.8f", comments="", header='t,r,y,u')
+    np.savetxt(PATH_DEFAULT + "DCmotor_stairs_closed_exp.csv", exp, delimiter=",",
                 fmt="%0.8f", comments="", header='t,r,y,u')
     # Now all is done, close the connection and close the figure.
     system.disconnect()
@@ -644,7 +529,7 @@ def set_controller(system, controller, output='angle', deadzone=0.2):
 
 
 
-def profile_closed(system, timevalues = [0, 1, 2 ,3], refvalues = [0, 720, 720, 0], filepath=PATH+"DCmotor_profile_closed_exp.csv"):
+def profile_closed(system, timevalues = [0, 1, 2 ,3], refvalues = [0, 720, 720, 0]):
     def profile_message(system, userdata, message):
         # This is the callback for receiving messages from the plant
         q.put(message)
@@ -699,7 +584,7 @@ def profile_closed(system, timevalues = [0, 1, 2 ,3], refvalues = [0, 720, 720, 
 
     # setting the total of points and the total of frames
     total_points = int_timevalues[-1] + 1
-    frames = math.ceil(total_points / buffer)
+    frames = ceil(total_points / buffer)
 
     # vectors for storing the results of the experiment
     y = []
@@ -710,21 +595,31 @@ def profile_closed(system, timevalues = [0, 1, 2 ,3], refvalues = [0, 720, 720, 
 
     # Setting the graphics configuration for visualizing the experiment
 
-    fig, ax = plt.subplots(figsize=(16, 9))
+    fig, (ay, au) = plt.subplots(nrows=2, ncols=1, width_ratios=[1], height_ratios=[4, 1], figsize=(10, 6))
     # settings for the upper axes, depicting the model and speed data
-    ax.set_title(f'Profile experiment with {len(timevalues):d} points and a duration of {timevalues[-1]:0.2f} seconds' )
-    ax.set_ylabel('Degrees/s (or Degrees)')
-    ax.set_xlabel('Time (seconds)')
-    ax.grid(color='#806600ff', linestyle='--', linewidth=0.25)
-    ax.set_facecolor('#f4eed7ff')
-    line_r, = ax.plot(t, r,  color="#005544ff", linewidth=1.25)
-    line_y, = ax.plot(t, y,  color="#d45500ff", linewidth=1.25)
-    ax.legend([line_r, line_y], ['$r(t)$ (reference)', '$y_R(t)$ (output)'], fontsize=16)
-    ax.set_xlim(0, sampling_time * (total_points - 1))
+    ay.set_title(f'Profile response experiment with a duration of {timevalues[-1]:0.2f} seconds and {len(timevalues):d} edges')
+    ay.set_ylabel('Degrees/s (or Degrees)')
+    ay.set_xlabel('Time (seconds)')
+    ay.grid(color='#806600ff', linestyle='--', linewidth=0.25)
+    ay.set_facecolor('#f4eed7ff')
+    line_r, = ay.plot(t, r,  color="#005544ff", linewidth=1.25)
+    line_y, = ay.plot(t, y,  color="#d45500ff", linewidth=1.25)
+    ay.legend([line_r, line_y], ['$r(t)$ (reference)', '$y(t)$ (output)'], fontsize=FONT_SIZE)
+    ay.set_xlim(0, sampling_time * (total_points - 1))
     spany = max_val - min_val
-    ax.set_ylim( min_val-0.1*abs(spany), max_val + 0.1* spany)
+    ay.set_ylim( min_val-0.1*abs(spany), max_val + 0.1* spany)
+
+    au.set_facecolor('#d7f4e3ff')
+    au.set_ylim(-5.5, 5.5)
+    au.set_xlim(0, total_points*sampling_time)
+    au.grid(color='#008066ff', linestyle='--', linewidth=0.25)
+    line_u, = au.plot(t, u, color="#0066ffff")
+    au.legend([line_u], ['$u(t)$ (Volts)'], fontsize=FONT_SIZE)
+
+
     line_r.set_data(t, r)
     line_y.set_data(t, y)
+
     plt.draw()
 
     # This is the queue of messages filled by the stair_message callback
@@ -769,17 +664,17 @@ def profile_closed(system, timevalues = [0, 1, 2 ,3], refvalues = [0, 720, 720, 
             exp.append([tframe[ind], rframe[ind], yframe[ind], uframe[ind]])
             line_y.set_data(t, y)
             line_r.set_data(t, r)
+            line_u.set_data(t, u)
 
 
             # drawing a new point from the current dataframe
             plt.draw()
             plt.pause(sampling_time)
-    PATH1 = r'/home/leonardo/sharefolder/ProyectoSabatico/Reporte/figures/'
-    plt.savefig(PATH1 + "ProfileMotor.svg", format="svg", bbox_inches="tight")
-    plt.show()
-    Path(PATH).mkdir(exist_ok=True)
+
     # Now, we save the results of the experiment in the provided filepath
-    np.savetxt(filepath , exp, delimiter=",",
+    np.savetxt(PATH_DATA + "DCmotor_profile_closed_exp.csv" , exp, delimiter=",",
+                fmt="%0.8f", comments="", header='t,r,y,u')
+    np.savetxt(PATH_DEFAULT + "DCmotor_profile_closed_exp.csv" , exp, delimiter=",",
                 fmt="%0.8f", comments="", header='t,r,y,u')
     # Now all is done, close the connection and close the figure.
     system.disconnect()
@@ -797,10 +692,16 @@ def read_model_pbrs():
             num_line += 1
         return alpha, tau
 
+
 if __name__ == "__main__":
-    motor1 = MotorSystemIoT()
-    set_pid(motor1, kp=0.042648109526048, ki=0, kd=0, N=11.9, beta=1, output = "angle")
-    step_closed(motor1, low_val=000, high_val=100, low_time=1.5, high_time=2)
+    motor1 = MotorSystemIoT(plant_number=2201)
+    print(motor1.codes["SYS_USER_SIGNALS_CLOSED"])
+    set_pid(motor1, kp=0.042648109526048, ki=0.02, kd=0, N=11.9, beta=1, output = "angle", deadzone=0.2)
+    st = [50,80,-50,100]
+    import control as ct
+    s = ct.TransferFunction.s
+    #C= 0.042 + 0.1/s
 
-
+    #set_controller(motor1, C)
+    profile_closed(motor1)
 
