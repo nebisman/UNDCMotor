@@ -1,2 +1,2 @@
-include unthermal/datafiles/*.csv
+include unmotor/datafiles/*.csv
 
