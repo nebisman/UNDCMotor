@@ -11,8 +11,7 @@ import json
 import time
 from scipy.signal import cont2discrete
 from .motorsys import MotorSystemIoT, PATH_DATA, PATH_DEFAULT, FONT_SIZE, read_csv_file
-import matplotlib
-matplotlib.use("TkAgg", force=True)
+
 
 
 

@@ -20,10 +20,6 @@ import time
 
 
 
-import matplotlib
-matplotlib.use("TkAgg", force=True)
-
-
 PBRS_LENGTH = 1023
 
 def read_csv_file3(filepath):

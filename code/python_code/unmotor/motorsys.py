@@ -15,25 +15,6 @@ import csv
 from scipy.interpolate import PchipInterpolator
 
 
-# from time import sleep
-# import numpy as np
-#
-# import paho.mqtt.client as mqtt
-# import control as ct
-# import struct
-# from queue import Queue
-# import math
-# import json
-# from pathlib import Path
-# import csv
-# import matplotlib.pyplot as plt
-#
-# from scipy.signal import cont2discrete
-
-
-
-# default parameters of communication
-
 
 BROKER = "18.204.70.207"
 PORT = 1883
