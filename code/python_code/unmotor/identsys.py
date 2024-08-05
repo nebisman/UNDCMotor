@@ -9,7 +9,7 @@ from scipy.interpolate import interp1d, PchipInterpolator
 from scipy.stats import linregress
 import control as ct
 from .motorsys import MotorSystemIoT, PATH_DATA, PATH_DEFAULT, FONT_SIZE
-from .controlsys import  long2hex, float2hex, hex2long, set_pid, hex2float, hexframe_to_array
+from .controlsys import  long2hex, float2hex, hex2long, set_pid, hex2float, hexframe_to_array, display_immediately
 import json
 from math import ceil
 from queue import Queue
@@ -89,18 +89,19 @@ def step_open(system, u0=1.5, u1=3.5, t0=1, t1=1):
     exp = []
     # Setting the graphics configuration for visualizing the experiment
 
-    fig, (yax, uax) = plt.subplots(nrows=2, ncols=1, width_ratios = [1], height_ratios= [4,1], figsize=(16, 9))
-    fig.set_facecolor('#b7c4c8f0')
-    fig.suptitle(f'Experiment of Step response with a duration of {total_points * sampling_time: 0.2f} seconds')
+    # display config
+    with plt.ioff():
+        fig, (yax, uax) = plt.subplots(nrows=2, ncols=1, width_ratios=[1], height_ratios=[4, 1], figsize=(10, 6))
+    display_immediately(fig)
 
-
-    yax.set_title('Velocity in degrees per second')
+    yax.set_title(f'Experiment of Step response with a duration of {total_points * sampling_time: 0.2f} seconds', fontsize=FONT_SIZE)
     yax.set_ylabel('Degrees/s')
+    yax.set_xlabel('Time (s)')
     yax.grid(True);
     yax.grid(color='#1a1a1a40', linestyle='--', linewidth=0.25)
     yax.set_facecolor('#f4eed7')
 
-    uax.set_title('Input voltage to DC motor')
+
     uax.set_xlabel('Time (s)')
     uax.set_ylabel('Volts')
     uax.grid(True);
@@ -110,7 +111,8 @@ def step_open(system, u0=1.5, u1=3.5, t0=1, t1=1):
 
     line_u, = uax.plot(t, u, drawstyle='steps-post', color="#338000")
     line_y, = yax.plot(t, y,  color="#d40055")
-
+    uax.legend([line_u], ['$u(t)$ (open loop voltage)'], fontsize=FONT_SIZE, loc="lower right")
+    yax.legend([line_y], ['$y(t)$ (speed in Deg/s)'], fontsize=FONT_SIZE, loc="lower right")
     #Setting the limits of figure
     pu = 0.1
     ulimits = [low_val, high_val]
@@ -122,7 +124,8 @@ def step_open(system, u0=1.5, u1=3.5, t0=1, t1=1):
     uax.set_xlim(0, sampling_time * (total_points - 1))
     yax.set_xlim(0, sampling_time * (total_points - 1))
     yax.set_ylim(ylimits[0] - 25, ylimits[1] + 50)
-
+    fig.canvas.draw()
+    time.sleep(sampling_time)
 
     # this is the queue of messages filled by the step_message callback
     q = Queue()
@@ -149,8 +152,9 @@ def step_open(system, u0=1.5, u1=3.5, t0=1, t1=1):
         t.extend(tframe)
         line_u.set_data(t, u)
         line_y.set_data(t, y)
-        plt.draw()
-        plt.pause(sampling_time)
+        fig.canvas.draw()
+        time.sleep(sampling_time)
+
     for ind in range(len(y)):
         exp.append([t[ind], u[ind], y[ind]])
 
@@ -159,7 +163,6 @@ def step_open(system, u0=1.5, u1=3.5, t0=1, t1=1):
     np.savetxt(PATH_DEFAULT + "DCmotor_step_open_exp.csv", exp, delimiter=",",
                 fmt="%0.8f", comments="", header='t,u,y')
     system.disconnect()
-    plt.show()
     return t, u, y
 
 
@@ -212,12 +215,18 @@ def prbs_open(system, low_val = 2, high_val = 4, divider = 2):
     exp = []
 
     # Setting the graphics configuration for visualizing the experiment
+    print("Starting experiment, please wait...")
+    with plt.ioff():
+        fig, (yax, uax) = plt.subplots(nrows=2, ncols=1, width_ratios=[1], height_ratios=[3, 1], figsize=(10, 6))
+    display_immediately(fig)
 
-    fig, (yax, uax)  = plt.subplots(nrows=2, ncols=1, width_ratios=[1], height_ratios=[2, 1], figsize=(16, 9))
-    fig.set_facecolor('#b7c4c8f0')
-    fig.suptitle( f'PRBS identification with {total_points:d} samples and a duration of {total_points * sampling_time: 0.2f} seconds')
 
+    fig.set_facecolor('#ffffff')
 
+    fig.suptitle( f'PRBS identification with {total_points:d} samples'
+                  f' and a duration of {total_points * sampling_time: 0.2f} seconds', fontsize=10)
+
+    yax.set_title("Starting experiment, please wait...")
     yax.set_ylabel('Speed (Degrees/s)')
     yax.grid(True);
     yax.grid(color='#1a1a1a40', linestyle='--', linewidth=0.25)
@@ -243,9 +252,7 @@ def prbs_open(system, low_val = 2, high_val = 4, divider = 2):
     uax.set_xlim(0, sampling_time * (total_points - 1))
     yax.set_xlim(0, sampling_time * (total_points - 1))
     yax.set_ylim(ylimits[0] - 25, ylimits[1] + 25)
-
-
-    plt.draw()
+    fig.canvas.draw()
     # this is the queue of messages filled by the step_message callback
     q = Queue()
 
@@ -285,6 +292,7 @@ def prbs_open(system, low_val = 2, high_val = 4, divider = 2):
 
         #we plot 5 frames at start
         if curr_frame <= 5:
+            yax.set_title("")
             uax.set_xlim(0, 5*buffer*sampling_time)
             yax.set_xlim(0, 5*buffer*sampling_time)
 
@@ -296,10 +304,11 @@ def prbs_open(system, low_val = 2, high_val = 4, divider = 2):
 
 
         # plotting the current data
+
         line_u.set_data(t, u)
         line_y.set_data(t, y)
-        plt.draw()
-        plt.pause(0.1)
+        fig.canvas.draw()
+        time.sleep(0.1)
 
     # preparing the matrix for storing the results of the identification experiment
     for ind in range(len(y)):
@@ -357,10 +366,18 @@ def step_open_staticgain(system, low_val=1.5, high_val=3.5, low_time=1, high_tim
     # vectors for storing the results and the experiment
     y = []
     u = []
+    t = []
 
 
     # this is the queue of messages filled by the step_message callback
     q = Queue()
+
+    with plt.ioff():
+        fig = plt.gcf()
+        ax = fig.get_axes()[0]
+
+    line_y, = ax.plot(t, y, linestyle = 'solid', color="#d3bc5fff", linewidth=1)
+
 
     # at start we define a current frame of -1 indicating that no frame
     # has already been received
@@ -378,9 +395,14 @@ def step_open_staticgain(system, low_val=1.5, high_val=3.5, low_time=1, high_tim
         yframe_hex = str(msg_dict["y"])
         uframe = hexframe_to_array(uframe_hex)
         yframe = hexframe_to_array(yframe_hex)
+        tframe = sampling_time * (np.arange(len(yframe)) + (curr_frame - 1) * buffer)
         y.extend(yframe)
         u.extend(uframe)
-
+        t.extend(tframe)
+        line_y.set_data(t, y)
+        fig.canvas.draw()
+        time.sleep(0.1)
+    line_y.set_data([], [])
     return u, y
 
 
@@ -393,8 +415,10 @@ def get_static_model(system):
     yee = []
     uee = []
 
-    fig, ax = plt.subplots(figsize=(16, 9))
-    fig.set_facecolor('#b7c8be')
+    with plt.ioff():
+        fig, ax = plt.subplots(figsize=(10, 6))
+    display_immediately(fig)
+
     ax.set_title('Static gain response experiment for UNDCMotor')
     ax.set_xlabel('Input (Volts)')
     ax.set_ylabel('Steady state speed (Degrees/s)')
@@ -407,7 +431,10 @@ def get_static_model(system):
     line_exp, = ax.plot(uee, yee, color="#00aa00", linewidth=1.5, marker=r"$\circ$", markeredgewidth=0.1)
     ax.set_xlim(-5, 5)
     ax.set_ylim(-780, 780)
-    plt.draw()
+    box = dict(boxstyle='round,pad=0.5', facecolor='white', edgecolor='white', alpha=0.5)
+
+
+
 
     # These are the parameters for obtaining the actuator response
     timestep = 3
@@ -417,6 +444,7 @@ def get_static_model(system):
     # # This is the set of step responses for obtaining steady state in speed
     delta_dz = 0.02
     u_pos = np.logspace(np.log10(dz_point - delta_dz), np.log10(5), points , endpoint=True, base=10)
+    print(u_pos)
     u_neg = -u_pos[::-1]
     u_tot = np.concatenate((u_neg, u_pos))
     exp = []
@@ -434,8 +462,10 @@ def get_static_model(system):
         yee.append(yf)
         uee.append(ui)
         line_exp.set_data(uee, yee)
-        plt.draw()
-        plt.pause(0.1)
+        ax.text(300, 4, 'Last voltage \nLast stationary spped$', fontsize=FONT_SIZE,
+                color='#ff0066', ha='center', va='bottom', bbox=box)
+        fig.canvas.draw()
+        time.sleep(0.5)
 
     np.savetxt(PATH_DEFAULT + "DCmotor_static_gain_response.csv",
                exp, delimiter=",", fmt="%0.8f", comments="", header='u,y')
@@ -446,12 +476,9 @@ def get_static_model(system):
     return
 
 
-
-
-def get_fomodel_step(system, yop = 400):
+def get_fomodel_step(system, yop=400, usefile=False):
     """This function allows to obtain the first order model
     from the step response"""
-
 
     ymax = system.speed_from_volts(5)
     ymin = system.speed_from_volts(-5)
@@ -482,9 +509,14 @@ def get_fomodel_step(system, yop = 400):
         raise ValueError(f"The maximum speed for this motor is {ymax:.2f} \n\t\t\t and the minimum is {ymin:.2f} ")
 
 
+    if  not usefile:
+        try:
+            t, u, y = step_open(system, ua, ub, timestep, timestep)
+        except:
+            raise TimeoutError("The connection has been lost. Please try again")
     # we get the step response near to operation point
-    t, u, y = step_open(system, ua, ub, timestep, timestep)
-    plt.close(1)
+    t, u, y = read_csv_file3(PATH_DATA + 'DCmotor_step_open_exp.csv')
+
     # we interpolate the experimental response
     interp = PchipInterpolator(t, y)
 
@@ -541,9 +573,20 @@ def get_fomodel_step(system, yop = 400):
     # we add the initial speed to compare
     ym = ym + ya
 
-    # now we compare the model with the experimental data
-    fig, (ay, au) = plt.subplots(nrows=2, ncols=1, width_ratios = [1], height_ratios= [4,1], figsize=(16, 9))
-    fig.set_facecolor('#b7c4c8f0')
+    if usefile:
+        with plt.ioff():
+            plt.close("all")
+            fig, (ay, au) = plt.subplots(nrows=2, ncols=1, width_ratios=[1], height_ratios=[4, 1], figsize=(10, 6))
+        display_immediately(fig)
+        fig.set_facecolor('#ffffff')
+
+    else:
+        with plt.ioff():
+            fig = plt.gcf()
+            ay, au = fig.get_axes()
+            ay.cla()
+            au.cla()
+
 
     # settings for the upper axes, depicting the model and speed data
     ay.set_title('Estimated first order model for UNDCMotor')
@@ -553,19 +596,20 @@ def get_fomodel_step(system, yop = 400):
     ay.set_facecolor('#f4eed7')
     ay.set_xlim(0, 2*timestep)
     box = dict(boxstyle='round,pad=0.5', facecolor='white', edgecolor='white', alpha=0.5)
-    ay.text(timestep + tau + 1, (ya+yb)/2, r'$\Delta_{y,e}=%0.2f$'%delta_y, fontsize=16, color='#ff0066',
+    ay.text(timestep + tau + 1, (ya+yb)/2, r'$\Delta_{y,e}=%0.2f$'%delta_y, fontsize=FONT_SIZE, color='#ff0066',
              ha='center', va='bottom', bbox=box)
-    ay.text(timestep + tau + 0.2, ya + 0.63212*delta_y,  r'$\tau = %0.2f$'%tau, fontsize=16, color='#ff0066')
-
+    ay.text(timestep + tau + 0.2, ya + 0.63212*delta_y,  r'$\tau = %0.2f$'%tau, fontsize=FONT_SIZE, color='#ff0066')
+    ay.set_ylabel('Speed (Deg/s)')
     # settings for the lower, depicting the input
     au.set_xlim(0, 2 *timestep)
     au.grid(True);
     au.set_facecolor('#d7f4ee')
     au.grid(color='#1a1a1a40', linestyle='--', linewidth=0.25)
-    au.text(timestep + 1, (ua+ub)/2, r'$\Delta_u=%0.2f$'%delta_u, fontsize=16, color="#00aa00",
+    au.text(timestep + 1, (ua+ub)/2, r'$\Delta_u=%0.2f$'%delta_u, fontsize=FONT_SIZE, color="#00aa00",
              ha='center', va='bottom', bbox=box)
-    au.set_xlabel('Time (seconds)')
-    ay.set_ylabel('Voltage (V)')
+    au.set_xlabel('Time (s)')
+    au.set_ylabel('Volts (V)')
+
 
     line_exp, = ay.plot(t, y, color="#0088aa", linewidth=1.5, linestyle=(0, (1, 1)))
     line_mod, = ay.plot(tm, ym, color="#ff0066", linewidth=1.5, )
@@ -573,10 +617,9 @@ def get_fomodel_step(system, yop = 400):
     line_u, = au.plot(t, u, color="#00aa00")
     modelstr = r"Model $G(s)= \frac{\alpha_m}{\tau_m\,s + 1} = \frac{%0.3f }{%0.3f\,s+1}$" %(alpha, tau)
 
-    ay.legend([line_exp, line_mod], ['Data', modelstr], fontsize=16)
-    au.legend([line_u], ['Input'])
-    plt.show()
-    Path(PATH).mkdir(exist_ok=True)
+    ay.legend([line_exp, line_mod], ['Data', modelstr], fontsize=FONT_SIZE)
+    au.legend([line_u], ['Input'], fontsize = FONT_SIZE)
+
     exp = [[alpha, tau]]
     np.savetxt(PATH_DATA + "DCmotor_fomodel_step.csv", exp, delimiter=",", fmt="%0.8f", comments="", header='alpha, tau')
     np.savetxt(PATH_DEFAULT + "DCmotor_fomodel_step.csv", exp, delimiter=",", fmt="%0.8f", comments="",
@@ -585,7 +628,7 @@ def get_fomodel_step(system, yop = 400):
     return G
 
 
-def get_models_prbs(system, yop = 100, usefile = False):
+def get_models_prbs(system, yop = 400, usefile = False):
 
     norm = np.linalg.norm
 
@@ -646,12 +689,11 @@ def get_models_prbs(system, yop = 100, usefile = False):
 
     if not usefile:
         try:
-            prbs_open(system, low_val=ua, high_val=ub, divider=2)
+            prbs_open(system, low_val=ua, high_val=ub, divider=4)
         except:
             raise TimeoutError("The connection has been lost. Please try again")
 
     t, u, y = read_csv_file3(PATH_DATA + 'DCmotor_prbs_open_exp.csv')
-    plt.close(1)
     ya = system.speed_from_volts(ua)
     yb = system.speed_from_volts(ub)
     delta_y = yb - ya
@@ -703,8 +745,20 @@ def get_models_prbs(system, yop = 100, usefile = False):
 
     # we calculate the step response from the model
     # now we compare the model with the experimental data
-    fig, (ay, au) = plt.subplots(nrows=2, ncols=1, width_ratios=[1], height_ratios=[5, 1], figsize=(16, 9))
-    fig.set_facecolor('#b7c4c8f0')
+    if usefile:
+        with plt.ioff():
+            plt.close("all")
+            fig, (ay, au) = plt.subplots(nrows=2, ncols=1, width_ratios=[1], height_ratios=[4, 1], figsize=(10, 6))
+            fig.set_facecolor('#ffffff')
+        display_immediately(fig)
+
+
+    else:
+        with plt.ioff():
+            fig = plt.gcf()
+            ay, au = fig.get_axes()
+            ay.cla()
+            au.cla()
 
     # settings for the upper axes, depicting the model and speed data
     #ay.set_title('Data and estimated second order model for UNDCMotor')
@@ -736,11 +790,9 @@ def get_models_prbs(system, yop = 100, usefile = False):
     modelstr2 = r"Model $G_2(s) = \frac{%0.3f }{(%0.3f\,s+1)(%0.3f\,s+1)}$ ($FIT = %0.1f$"%(alpha2, tau1, tau2, r2) + "%)"
     ay.set_title("Comparison of first and second order models estimated with a PRBS signal at the point $y_{OP}=%0.1f^o/s$."%yop)
     ay.legend([line_exp, line_model1, line_model2], ['Data', modelstr1, modelstr2],
-              fontsize=14, loc = 'lower right',framealpha=0.95)
-    au.legend([line_u], ['PRBS Input'], fontsize=14)
-    # PATH1 = r'/home/leonardo/sharefolder/ProyectoSabatico/Reporte/figures/'
-    # plt.savefig(PATH1 + "DCmotor_pbrs.svg", format="svg", bbox_inches="tight")
-    plt.show()
+              fontsize=FONT_SIZE, loc = 'lower right',framealpha=0.95)
+    au.legend([line_u], ['PRBS Input'], fontsize=FONT_SIZE)
+    fig.canvas.draw()
     fo_model = [[alpha, tau]]
     so_model = [[alpha2, tau1, tau2]]
     np.savetxt(PATH_DATA + "DCmotor_fo_model_pbrs.csv", fo_model, delimiter=",",

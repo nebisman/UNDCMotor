@@ -810,7 +810,6 @@ static void controlPidTask(void *pvParameters) {
              }
 
 
-
         //saturated control signal
         usat =  constrain(u, -5 + deadzone, 5 - deadzone);
         voltsToMotor(compDeadZone(usat, deadzone));
