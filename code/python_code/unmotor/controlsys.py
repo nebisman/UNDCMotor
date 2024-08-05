@@ -63,19 +63,13 @@ def hexframe_to_array(hexframe):
     return array
 
 
-# def read_csv_file(PATH_DATA):
-#     with open(filepath , newline='') as file:
-#         reader = csv.reader(file)
-#         # Iterate over each row in the CSV file
-#         num_line = 0
-#         u = []
-#         y = []
-#         for row in reader:
-#             if num_line != 0:
-#                u.append(float(row[0]))
-#                y.append(float(row[1]))
-#             num_line += 1
-#         return u, y
+def display_immediately(fig):
+    canvas = fig.canvas
+    display(canvas)
+    canvas._handle_message(canvas, {'type': 'send_image_mode'}, [])
+    canvas._handle_message(canvas, {'type': 'refresh'}, [])
+    canvas._handle_message(canvas, {'type': 'initialized'}, [])
+    canvas._handle_message(canvas, {'type': 'draw'}, [])
 
 
 def set_reference(system, ref_value=50):
@@ -175,16 +169,22 @@ def step_closed(system, r0=0 , r1=100, t0=0 ,  t1=1):
     exp = []
 
     # Setting the graphics configuration for visualizing the experiment
-    fig, (ay, au) = plt.subplots(nrows=2, ncols=1, width_ratios = [1], height_ratios= [4,1], figsize=(16, 9))
-    fig.set_facecolor('#b7c4c8f0')
 
+    with plt.ioff():
+        fig, (ay, au) = plt.subplots(nrows=2, ncols=1, width_ratios=[1], height_ratios=[4, 1], figsize=(10, 6))
+    display_immediately(fig)
+
+    # display configuration
+    fig.set_facecolor('#ffffff')
     # settings for the upper axes, depicting the model and speed data
-    ay.set_title(f'Closed loop step response experiment with an initial value of  $r_0=${r0:0.2f} and a  final value of $r_0=${r1:0.2f}')
+    ay.set_title(f'Closed loop step response experiment with an initial value of  $r_0=${r0:0.2f}'
+                 f' and a  final value of $r_0=${r1:0.2f}', fontsize= FONT_SIZE)
     ay.set_ylabel('Degrees/s (or Degrees)')
     ay.grid(True);
     ay.grid(color='#806600ff', linestyle='--', linewidth=0.25)
     ay.set_facecolor('#f4eed7ff')
     ay.set_xlim(0, t0 + t1  - sampling_time)
+    ay.set_xlabel('Time(s)')
 
     #Setting the limits of figure
     py = 0.3
@@ -197,15 +197,18 @@ def step_closed(system, r0=0 , r1=100, t0=0 ,  t1=1):
     au.set_ylim(-5, 5)
     au.set_xlim(0, t0 + t1 - sampling_time )
     au.grid(color='#008066ff', linestyle='--', linewidth=0.25)
-
+    au.set_ylabel('Volts')
+    au.set_xlabel('Time(s)')
 
     line_r, = ay.plot(t, r, drawstyle='steps-post', color="#008066ff", linewidth=1.25) # drawstyle='steps'
     line_y, = ay.plot(t, y, color="#ff0066ff")
     line_u, = au.plot(t, u, color="#0066ffff")
 
-    ay.legend([line_r, line_y], ['$r(t)$ (reference)', '$y(t)$ (output)'], fontsize=16, loc ="upper left")
-    au.legend([line_u], ['$u(t)$ (control signal)'], fontsize=14)
-    plt.draw()
+    ay.legend([line_r, line_y], ['$r(t)$ (reference)', '$y(t)$ (output)'], fontsize=FONT_SIZE, loc ="lower right")
+    au.legend([line_u], ['$u(t)$ (control signal)'], fontsize=FONT_SIZE)
+    fig.canvas.draw()
+    time.sleep(0.1)
+
 
 
 
@@ -232,33 +235,29 @@ def step_closed(system, r0=0 , r1=100, t0=0 ,  t1=1):
         uframe = hexframe_to_array(uframe_hex)
         yframe = hexframe_to_array(yframe_hex)
         tframe = sampling_time * (np.arange(len(rframe)) + (curr_frame - 1) * buffer)
+        r.extend(rframe)
+        y.extend(yframe)
+        u.extend(uframe)
+        t.extend(tframe)
+        line_r.set_data(t, r)
+        line_y.set_data(t, y)
+        line_u.set_data(t, u)
+        fig.canvas.draw()
+        time.sleep(0.1)
 
-        for ind in range(len(rframe)):
-            r.append(rframe[ind])
-            y.append(yframe[ind])
-            u.append(uframe[ind])
-            t.append(tframe[ind])
-            exp.append([tframe[ind], rframe[ind], yframe[ind], uframe[ind]])
-            line_r.set_data(t, r)
-            line_y.set_data(t, y)
-            line_u.set_data(t, u)
-            plt.draw()
-            plt.pause(sampling_time)
-
-
-
-
+    for ind in range(len(y)):
+        exp.append([t[ind], r[ind], y[ind], u[ind]])
 
     np.savetxt(PATH_DATA + "DCmotor_step_closed_exp.csv", exp, delimiter=",",
                 fmt="%0.8f", comments="", header='t,r,y,u')
     np.savetxt(PATH_DEFAULT + "DCmotor_step_closed_exp.csv", exp, delimiter=",",
                 fmt="%0.8f", comments="", header='t,r,y,u')
     system.disconnect()
-    plt.show()
+
     return t, r, y, u
 
 
-def stairs_closed(system, stairs=[40, 50, 60], duration= 2):
+def stairs_closed(system, stairs=[90, 180, 270], duration= 1.5):
     def stairs_message(system, userdata, message):
         q.put(message)
 
@@ -317,9 +316,12 @@ def stairs_closed(system, stairs=[40, 50, 60], duration= 2):
 
     # Setting the graphics configuration for visualizing the experiment
 
+    with plt.ioff():
+        fig, (ay, au) = plt.subplots(nrows=2, ncols=1, width_ratios=[1], height_ratios=[4, 1], figsize=(10, 6))
+    display_immediately(fig)
 
-    fig, (ay, au) = plt.subplots(nrows=2, ncols=1, width_ratios=[1], height_ratios=[4, 1], figsize=(10, 6))
     # settings for the upper axes, depicting the model and speed data
+    fig.set_facecolor('#ffffff')
     ay.set_title(f'Stairs experiment with {len(stairs):d} stairs and a duration of {len(stairs)*duration:0.2f} seconds' )
     ay.set_ylabel('Degrees/s (or Degrees)')
     ay.set_xlabel('Time (seconds)')
@@ -327,18 +329,21 @@ def stairs_closed(system, stairs=[40, 50, 60], duration= 2):
     ay.set_facecolor('#f4eed7ff')
     line_r, = ay.plot(t, r,  color="#005544ff", linewidth=1.25)
     line_y, = ay.plot(t, y,  color="#d45500ff", linewidth=1.25)
-    ay.legend([line_r, line_y], ['$r(t)$ (reference)', '$y(t)$ (output)'], fontsize=16)
+    ay.legend([line_r, line_y], ['$r(t)$ (reference)', '$y(t)$ (output)'], fontsize=FONT_SIZE)
     ay.set_xlim(0, sampling_time * (total_points - 1))
     spany = max_val - min_val
-    ay.set_ylim( min_val-0.1*abs(spany), max_val + 0.1* spany)
+    ay.set_ylim(np.min([0, min_val-0.1*abs(spany)]), max_val + 0.1* spany)
 
     au.set_facecolor('#d7f4e3ff')
     au.set_ylim(-5.5, 5.5)
     au.set_xlim(0, total_points*sampling_time)
     au.grid(color='#008066ff', linestyle='--', linewidth=0.25)
     line_u, = au.plot(t, u, color="#0066ffff")
-
-    plt.draw()
+    au.legend([line_u], ['$u(t)$ (control signal)'], fontsize=FONT_SIZE, loc ="lower right")
+    au.set_xlabel('Time (s)')
+    au.set_ylabel('Volts (V)')
+    fig.canvas.draw()
+    time.sleep(0.1)
 
 
     # This is the queue of messages filled by the stair_message callback
@@ -371,23 +376,19 @@ def stairs_closed(system, stairs=[40, 50, 60], duration= 2):
         yframe = hexframe_to_array(yframe_hex)
         tframe = sampling_time * (np.arange(len(rframe)) + (curr_frame - 1) * buffer)
 
-        # we plot every single point received in each dataframe
-        # and save it in the matrix exp for storing in a csv file
-        for ind in range(len(rframe)):
-            #storing t, r, y, and u vectors
-            r.append(rframe[ind])
-            y.append(yframe[ind])
-            u.append(uframe[ind])
-            t.append(tframe[ind])
-
-            # storing the experiment
-            exp.append([tframe[ind], rframe[ind], yframe[ind], uframe[ind]])
-            line_r.set_data(t, r)
-            line_y.set_data(t, y)
-            line_u.set_data(t, u)
-            # drawing a new point from the current dataframe
-            plt.draw()
-            plt.pause(sampling_time)
+        # we plot every dataframe
+        r.extend(rframe)
+        y.extend(yframe)
+        u.extend(uframe)
+        t.extend(tframe)
+        line_r.set_data(t, r)
+        line_y.set_data(t, y)
+        line_u.set_data(t, u)
+        fig.canvas.draw()
+        time.sleep(0.1)
+    #we save the results from the experiment
+    for ind in range(len(y)):
+        exp.append([t[ind], r[ind], y[ind], u[ind]])
 
     # Now, we save the results of the experiment in the provided filepath
     np.savetxt(PATH_DATA + "DCmotor_stairs_closed_exp.csv", exp, delimiter=",",
@@ -528,7 +529,7 @@ def set_controller(system, controller, output='angle', deadzone=0.2):
 
 
 
-def profile_closed(system, timevalues = [0, 1, 2 ,3], refvalues = [0, 720, 720, 0]):
+def profile_closed(system, timevalues = [0, 1, 2 ,3], refvalues = [0, 360, 360, 0]):
     def profile_message(system, userdata, message):
         # This is the callback for receiving messages from the plant
         q.put(message)
@@ -594,7 +595,10 @@ def profile_closed(system, timevalues = [0, 1, 2 ,3], refvalues = [0, 720, 720, 
 
     # Setting the graphics configuration for visualizing the experiment
 
-    fig, (ay, au) = plt.subplots(nrows=2, ncols=1, width_ratios=[1], height_ratios=[4, 1], figsize=(10, 6))
+    with plt.ioff():
+        fig, (ay, au) = plt.subplots(nrows=2, ncols=1, width_ratios=[1], height_ratios=[4, 1], figsize=(10, 6))
+    display_immediately(fig)
+
     # settings for the upper axes, depicting the model and speed data
     ay.set_title(f'Profile response experiment with a duration of {timevalues[-1]:0.2f} seconds and {len(timevalues):d} edges')
     ay.set_ylabel('Degrees/s (or Degrees)')
@@ -611,15 +615,18 @@ def profile_closed(system, timevalues = [0, 1, 2 ,3], refvalues = [0, 720, 720, 
     au.set_facecolor('#d7f4e3ff')
     au.set_ylim(-5.5, 5.5)
     au.set_xlim(0, total_points*sampling_time)
+    au.set_xlabel('Time (s)')
+    au.set_xlabel('Volts (V)')
     au.grid(color='#008066ff', linestyle='--', linewidth=0.25)
     line_u, = au.plot(t, u, color="#0066ffff")
     au.legend([line_u], ['$u(t)$ (Volts)'], fontsize=FONT_SIZE)
 
-
     line_r.set_data(t, r)
     line_y.set_data(t, y)
+    line_u.set_data(t, u)
+    fig.canvas.draw()
+    time.sleep(0.1)
 
-    plt.draw()
 
     # This is the queue of messages filled by the stair_message callback
     q = Queue()
@@ -650,25 +657,20 @@ def profile_closed(system, timevalues = [0, 1, 2 ,3], refvalues = [0, 720, 720, 
         yframe = hexframe_to_array(yframe_hex)
         tframe = sampling_time * (np.arange(len(rframe)) + (curr_frame - 1) * buffer)
 
-        # we plot every single point received in each dataframe
-        # and save it in the matrix exp, which allows to write a csv file
-        for ind in range(len(rframe)):
-            #storing t, r, y, and u vectors
-            r.append(rframe[ind])
-            y.append(yframe[ind])
-            u.append(uframe[ind])
-            t.append(tframe[ind])
+        # we plot every dataframe
+        r.extend(rframe)
+        y.extend(yframe)
+        u.extend(uframe)
+        t.extend(tframe)
+        line_r.set_data(t, r)
+        line_y.set_data(t, y)
+        line_u.set_data(t, u)
+        fig.canvas.draw()
+        time.sleep(0.1)
 
-            # storing the experiment
-            exp.append([tframe[ind], rframe[ind], yframe[ind], uframe[ind]])
-            line_y.set_data(t, y)
-            line_r.set_data(t, r)
-            line_u.set_data(t, u)
-
-
-            # drawing a new point from the current dataframe
-            plt.draw()
-            plt.pause(sampling_time)
+    # we save the results from the experiment
+    for ind in range(len(y)):
+        exp.append([t[ind], r[ind], y[ind], u[ind]])
 
     # Now, we save the results of the experiment in the provided filepath
     np.savetxt(PATH_DATA + "DCmotor_profile_closed_exp.csv" , exp, delimiter=",",

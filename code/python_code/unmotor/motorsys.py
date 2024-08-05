@@ -27,7 +27,7 @@ PLANT_NUMBER = "2201"
 
 PATH_DEFAULT = r"./experiment_files/"
 PATH_DATA = str(Path(__file__).parent) + r"/datafiles/"
-FONT_SIZE = 10
+FONT_SIZE = 12
 Path(PATH_DEFAULT).mkdir(exist_ok=True)
 
 
@@ -84,8 +84,7 @@ class MotorSystemIoT:
 
 
     def on_publish(self, client, userdata, mid):
-        print("Message Published: ", mid)
-        return
+        pass
 
 
 
