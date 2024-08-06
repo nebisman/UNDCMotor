@@ -794,6 +794,7 @@ static void controlPidTask(void *pvParameters) {
         computeReference();
         // updating error
 
+
         /** updating controller parameters if they changed */
         // integral action scaled to sampling time
         bi = ki*h;

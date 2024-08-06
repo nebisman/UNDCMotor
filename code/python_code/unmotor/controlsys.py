@@ -187,7 +187,7 @@ def step_closed(system, r0=0 , r1=100, t0=0 ,  t1=1):
     ay.set_xlabel('Time(s)')
 
     #Setting the limits of figure
-    py = 0.3
+    py = 0.6
     delta_r = abs(r1 - r0)
     ylimits = [r0 , r1]
     ylimits = [np.min(ylimits), np.max(ylimits)]
