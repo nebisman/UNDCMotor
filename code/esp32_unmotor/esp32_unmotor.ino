@@ -348,7 +348,15 @@ void connectMqtt()
 void connectWiFi(){
     WiFi.disconnect(true);
     WiFi.mode(WIFI_STA);
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+    #ifdef UNALCONNECTION
+        WiFi.begin(WIFI_SSID);
+        printf("\nConnecting to UNAL network, please wait\n");
+    #else    
+        WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+        printf("Connecting to WiFi network %s, please wait\n", WIFI_SSID);
+    #endif
+    
     while (WiFi.status() != WL_CONNECTED) {
         Serial.print(".");
         vTaskDelay(pdMS_TO_TICKS(250));
