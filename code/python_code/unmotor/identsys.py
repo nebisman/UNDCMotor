@@ -483,22 +483,22 @@ def get_fomodel_step(system, yop=400, usefile=False):
     ymax = system.speed_from_volts(5)
     ymin = system.speed_from_volts(-5)
     sigma = 50  # this is the deviation from the operation point
-    timestep = 2.5
+    timestep = 3
     if ymin <= yop <= ymin + sigma:
         ua = system.volts_from_speed(-5)
         ub = system.volts_from_speed(yop + sigma)
     elif ymin + sigma < yop <= -200:
         ua = system.volts_from_speed(yop - sigma)
         ub = system.volts_from_speed(yop + sigma)
-        timestep = 3.5
+        timestep = 4
     elif -200 < yop < 0:
         ua = system.volts_from_speed(-200)
         ub = system.volts_from_speed(-50)
-        timestep = 4.5
+        timestep = 5
     elif 0 <= yop < 200:
         ua = system.volts_from_speed(50)
         ub = system.volts_from_speed(200)
-        timestep = 4.5
+        timestep = 5
     elif 200 <= yop < ymax-sigma:
         ua = system.volts_from_speed(yop - sigma)
         ub = system.volts_from_speed(yop + sigma)
@@ -551,9 +551,9 @@ def get_fomodel_step(system, yop=400, usefile=False):
     # We also need to substract the time in which the step changes
 
     t1  = np.max(roots_t1) - timestep
-    t2  =  np.max(roots_t2) - timestep
-    tau3 = np.max(roots_t3) - timestep
-    t4 =  np.max(roots_t4) - timestep
+    t2  =  np.mean(roots_t2) - timestep
+    tau3 = np.mean(roots_t3) - timestep
+    t4 =  np.min(roots_t4) - timestep
 
     # We obtain 4 estimates of tau in 4 different points
     tau1 = t1 / 0.2231
@@ -596,9 +596,9 @@ def get_fomodel_step(system, yop=400, usefile=False):
     ay.set_facecolor('#f4eed7')
     ay.set_xlim(0, 2*timestep)
     box = dict(boxstyle='round,pad=0.5', facecolor='white', edgecolor='white', alpha=0.5)
-    ay.text(timestep + tau + 1, (ya+yb)/2, r'$\Delta_{y,e}=%0.2f$'%delta_y, fontsize=FONT_SIZE, color='#ff0066',
+    ay.text(timestep + tau + 1, (ya+yb)/2, r'$\Delta_{y,e}=%0.3f$'%delta_y, fontsize=FONT_SIZE, color='#ff0066',
              ha='center', va='bottom', bbox=box)
-    ay.text(timestep + tau + 0.2, ya + 0.63212*delta_y,  r'$\tau = %0.2f$'%tau, fontsize=FONT_SIZE, color='#ff0066')
+    ay.text(timestep + tau + 0.2, ya + 0.63212*delta_y,  r'$\tau = %0.3f$'%tau, fontsize=FONT_SIZE, color='#ff0066')
     ay.set_ylabel('Speed (Deg/s)')
     # settings for the lower, depicting the input
     au.set_xlim(0, 2 *timestep)
