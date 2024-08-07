@@ -205,7 +205,7 @@ def step_closed(system, r0=0 , r1=100, t0=0 ,  t1=1):
     line_u, = au.plot(t, u, color="#0066ffff")
 
     ay.legend([line_r, line_y], ['$r(t)$ (reference)', '$y(t)$ (output)'], fontsize=FONT_SIZE, loc ="lower right")
-    au.legend([line_u], ['$u(t)$ (control signal)'], fontsize=FONT_SIZE)
+    au.legend([line_u], ['$u(t)$ (control signal)'], fontsize=FONT_SIZE, loc ="lower left")
     fig.canvas.draw()
     time.sleep(0.1)
 
