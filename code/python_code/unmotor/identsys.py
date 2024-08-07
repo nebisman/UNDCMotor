@@ -547,7 +547,7 @@ def get_fomodel_step(system, yop=400, usefile=False):
     roots_t3 = interp.solve(y_t3, extrapolate=False)
     roots_t4 = interp.solve(y_t4, extrapolate=False)
 
-    # We take the mean of the roots in the event that the noise produces multiple values.
+    # We take the maximum value of the roots in the event that the noise produces multiple values.
     # We also need to substract the time in which the step changes
 
     t1  = np.max(roots_t1) - timestep
