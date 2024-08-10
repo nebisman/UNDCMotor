@@ -219,6 +219,7 @@ def step_closed(system, r0=0 , r1=100, t0=0 ,  t1=1):
     # at start we define a current frame of -1 indicating that no frame
     # has already been received
     curr_frame = -1
+    sync = False
     while curr_frame < frames:
         try:
             message = q.get(True, 20* buffer * sampling_time)
@@ -228,22 +229,25 @@ def step_closed(system, r0=0 , r1=100, t0=0 ,  t1=1):
         msg_dict = json.loads(decoded_message)
         frame_hex = str(msg_dict["frame"])
         curr_frame = hex2long(frame_hex)
-        rframe_hex =  str(msg_dict["r"])
-        uframe_hex = str(msg_dict["u"])
-        yframe_hex = str(msg_dict["y"])
-        rframe = hexframe_to_array(rframe_hex)
-        uframe = hexframe_to_array(uframe_hex)
-        yframe = hexframe_to_array(yframe_hex)
-        tframe = sampling_time * (np.arange(len(rframe)) + (curr_frame - 1) * buffer)
-        r.extend(rframe)
-        y.extend(yframe)
-        u.extend(uframe)
-        t.extend(tframe)
-        line_r.set_data(t, r)
-        line_y.set_data(t, y)
-        line_u.set_data(t, u)
-        fig.canvas.draw()
-        time.sleep(0.1)
+        if curr_frame == 1:
+            sync = True
+        if sync:
+            rframe_hex =  str(msg_dict["r"])
+            uframe_hex = str(msg_dict["u"])
+            yframe_hex = str(msg_dict["y"])
+            rframe = hexframe_to_array(rframe_hex)
+            uframe = hexframe_to_array(uframe_hex)
+            yframe = hexframe_to_array(yframe_hex)
+            tframe = sampling_time * (np.arange(len(rframe)) + (curr_frame - 1) * buffer)
+            r.extend(rframe)
+            y.extend(yframe)
+            u.extend(uframe)
+            t.extend(tframe)
+            line_r.set_data(t, r)
+            line_y.set_data(t, y)
+            line_u.set_data(t, u)
+            fig.canvas.draw()
+            time.sleep(0.1)
 
     for ind in range(len(y)):
         exp.append([t[ind], r[ind], y[ind], u[ind]])
@@ -352,7 +356,7 @@ def stairs_closed(system, stairs=[90, 180, 270], duration= 1.5):
     # At beginning we define a current frame of -1 indicating that no frame
     # has already been received
     curr_frame = -1
-
+    sync = False
     # loop for receiving dataframes from the ESP32
 
     while curr_frame < frames:
@@ -368,24 +372,27 @@ def stairs_closed(system, stairs=[90, 180, 270], duration= 1.5):
         msg_dict = json.loads(decoded_message)
         frame_hex = str(msg_dict["frame"])
         curr_frame = hex2long(frame_hex)
-        rframe_hex = str(msg_dict["r"])
-        uframe_hex = str(msg_dict["u"])
-        yframe_hex = str(msg_dict["y"])
-        rframe = hexframe_to_array(rframe_hex)
-        uframe = hexframe_to_array(uframe_hex)
-        yframe = hexframe_to_array(yframe_hex)
-        tframe = sampling_time * (np.arange(len(rframe)) + (curr_frame - 1) * buffer)
+        if curr_frame == 1:
+            sync = True
+        if sync:
+            rframe_hex = str(msg_dict["r"])
+            uframe_hex = str(msg_dict["u"])
+            yframe_hex = str(msg_dict["y"])
+            rframe = hexframe_to_array(rframe_hex)
+            uframe = hexframe_to_array(uframe_hex)
+            yframe = hexframe_to_array(yframe_hex)
+            tframe = sampling_time * (np.arange(len(rframe)) + (curr_frame - 1) * buffer)
 
-        # we plot every dataframe
-        r.extend(rframe)
-        y.extend(yframe)
-        u.extend(uframe)
-        t.extend(tframe)
-        line_r.set_data(t, r)
-        line_y.set_data(t, y)
-        line_u.set_data(t, u)
-        fig.canvas.draw()
-        time.sleep(0.1)
+            # we plot every dataframe
+            r.extend(rframe)
+            y.extend(yframe)
+            u.extend(uframe)
+            t.extend(tframe)
+            line_r.set_data(t, r)
+            line_y.set_data(t, y)
+            line_u.set_data(t, u)
+            fig.canvas.draw()
+            time.sleep(0.1)
     #we save the results from the experiment
     for ind in range(len(y)):
         exp.append([t[ind], r[ind], y[ind], u[ind]])
@@ -525,6 +532,7 @@ def set_controller(system, controller, output='angle', deadzone=0.2):
     system.connect()
     system.publish(topic_pub, message)
     system.disconnect()
+    print("Controller has been succesfully uploaded to UNDCMotor")
     return
 
 
@@ -634,7 +642,7 @@ def profile_closed(system, timevalues = [0, 1, 2 ,3], refvalues = [0, 360, 360, 
     # At beginning we define a current frame of -1 indicating that no frame
     # has already been received
     curr_frame = -1
-
+    sync = False
     # loop for receiving dataframes from the ESP32
     while curr_frame < frames:
         try:
@@ -649,24 +657,27 @@ def profile_closed(system, timevalues = [0, 1, 2 ,3], refvalues = [0, 360, 360, 
         msg_dict = json.loads(decoded_message)
         frame_hex = str(msg_dict["frame"])
         curr_frame = hex2long(frame_hex)
-        rframe_hex = str(msg_dict["r"])
-        uframe_hex = str(msg_dict["u"])
-        yframe_hex = str(msg_dict["y"])
-        rframe = hexframe_to_array(rframe_hex)
-        uframe = hexframe_to_array(uframe_hex)
-        yframe = hexframe_to_array(yframe_hex)
-        tframe = sampling_time * (np.arange(len(rframe)) + (curr_frame - 1) * buffer)
+        if curr_frame == 1:
+            sync = True
+        if sync:
+            rframe_hex = str(msg_dict["r"])
+            uframe_hex = str(msg_dict["u"])
+            yframe_hex = str(msg_dict["y"])
+            rframe = hexframe_to_array(rframe_hex)
+            uframe = hexframe_to_array(uframe_hex)
+            yframe = hexframe_to_array(yframe_hex)
+            tframe = sampling_time * (np.arange(len(rframe)) + (curr_frame - 1) * buffer)
 
-        # we plot every dataframe
-        r.extend(rframe)
-        y.extend(yframe)
-        u.extend(uframe)
-        t.extend(tframe)
-        line_r.set_data(t, r)
-        line_y.set_data(t, y)
-        line_u.set_data(t, u)
-        fig.canvas.draw()
-        time.sleep(0.1)
+            # we plot every dataframe
+            r.extend(rframe)
+            y.extend(yframe)
+            u.extend(uframe)
+            t.extend(tframe)
+            line_r.set_data(t, r)
+            line_y.set_data(t, y)
+            line_u.set_data(t, u)
+            fig.canvas.draw()
+            time.sleep(0.1)
 
     # we save the results from the experiment
     for ind in range(len(y)):

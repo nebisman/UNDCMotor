@@ -133,27 +133,32 @@ def step_open(system, u0=1.5, u1=3.5, t0=1, t1=1):
     # at start we define a current frame of -1 indicating that no frame
     # has already been received
     curr_frame = -1
+    sync = False
     while curr_frame < frames:
         try:
             message = q.get(True, 20* buffer * sampling_time)
         except:
             raise TimeoutError("The connection has been lost. Please try again")
+
         decoded_message = str(message.payload.decode("utf-8"))
         msg_dict = json.loads(decoded_message)
         frame_hex = str(msg_dict["frame"])
         curr_frame = hex2long(frame_hex)
-        uframe_hex = str(msg_dict["u"])
-        yframe_hex = str(msg_dict["y"])
-        uframe = hexframe_to_array(uframe_hex)
-        yframe = hexframe_to_array(yframe_hex)
-        tframe = sampling_time * (np.arange(len(yframe)) + (curr_frame - 1) * buffer)
-        y.extend(yframe)
-        u.extend(uframe)
-        t.extend(tframe)
-        line_u.set_data(t, u)
-        line_y.set_data(t, y)
-        fig.canvas.draw()
-        time.sleep(sampling_time)
+        if curr_frame == 1:
+            sync = True
+        if sync:
+            uframe_hex = str(msg_dict["u"])
+            yframe_hex = str(msg_dict["y"])
+            uframe = hexframe_to_array(uframe_hex)
+            yframe = hexframe_to_array(yframe_hex)
+            tframe = sampling_time * (np.arange(len(yframe)) + (curr_frame - 1) * buffer)
+            y.extend(yframe)
+            u.extend(uframe)
+            t.extend(tframe)
+            line_u.set_data(t, u)
+            line_y.set_data(t, y)
+            fig.canvas.draw()
+            time.sleep(sampling_time)
 
     for ind in range(len(y)):
         exp.append([t[ind], u[ind], y[ind]])
@@ -259,7 +264,7 @@ def prbs_open(system, low_val = 2, high_val = 4, divider = 2):
     # at start we define a current frame of -1 indicating that no frame
     # has already been received
     curr_frame = -1
-
+    sync = False
     # we keep the loop until all frames have been receuves
     while curr_frame < frames:
         try:
@@ -276,39 +281,43 @@ def prbs_open(system, low_val = 2, high_val = 4, divider = 2):
         # reading the current frame's number
         frame_hex = str(msg_dict["frame"])
         curr_frame = hex2long(frame_hex)
-        # reading the current frame values for the input u and the output y
-        uframe_hex = str(msg_dict["u"])
-        yframe_hex = str(msg_dict["y"])
-        uframe = hexframe_to_array(uframe_hex)
-        yframe = hexframe_to_array(yframe_hex)
+        if curr_frame == 1:
+            sync = True
+        if sync:
 
-        # Defining the current frame of time
-        tframe = sampling_time * (np.arange(len(uframe)) + (curr_frame - 1) * buffer)
+            # reading the current frame values for the input u and the output y
+            uframe_hex = str(msg_dict["u"])
+            yframe_hex = str(msg_dict["y"])
+            uframe = hexframe_to_array(uframe_hex)
+            yframe = hexframe_to_array(yframe_hex)
 
-        # updating t,u, and y vectors
-        y.extend(yframe)
-        u.extend(uframe)
-        t.extend(tframe)
+            # Defining the current frame of time
+            tframe = sampling_time * (np.arange(len(uframe)) + (curr_frame - 1) * buffer)
 
-        #we plot 5 frames at start
-        if curr_frame <= 5:
-            yax.set_title("")
-            uax.set_xlim(0, 5*buffer*sampling_time)
-            yax.set_xlim(0, 5*buffer*sampling_time)
+            # updating t,u, and y vectors
+            y.extend(yframe)
+            u.extend(uframe)
+            t.extend(tframe)
 
-
-        # after frame 5 we plot the last 6 frames
-        elif curr_frame >=6 :
-            uax.set_xlim(t[-6*buffer], t[-1])
-            yax.set_xlim(t[-6*buffer], t[-1])
+            #we plot 5 frames at start
+            if curr_frame <= 5:
+                yax.set_title("")
+                uax.set_xlim(0, 5*buffer*sampling_time)
+                yax.set_xlim(0, 5*buffer*sampling_time)
 
 
-        # plotting the current data
+            # after frame 5 we plot the last 6 frames
+            elif curr_frame >=6 :
+                uax.set_xlim(t[-6*buffer], t[-1])
+                yax.set_xlim(t[-6*buffer], t[-1])
 
-        line_u.set_data(t, u)
-        line_y.set_data(t, y)
-        fig.canvas.draw()
-        time.sleep(0.1)
+
+            # plotting the current data
+
+            line_u.set_data(t, u)
+            line_y.set_data(t, y)
+            fig.canvas.draw()
+            time.sleep(0.1)
 
     # preparing the matrix for storing the results of the identification experiment
     for ind in range(len(y)):
@@ -382,6 +391,7 @@ def step_open_staticgain(system, low_val=1.5, high_val=3.5, low_time=1, high_tim
     # at start we define a current frame of -1 indicating that no frame
     # has already been received
     curr_frame = -1
+    sync = False
     while curr_frame < frames:
         try:
             message = q.get(True, 20* buffer * sampling_time)
@@ -391,17 +401,20 @@ def step_open_staticgain(system, low_val=1.5, high_val=3.5, low_time=1, high_tim
         msg_dict = json.loads(decoded_message)
         frame_hex = str(msg_dict["frame"])
         curr_frame = hex2long(frame_hex)
-        uframe_hex = str(msg_dict["u"])
-        yframe_hex = str(msg_dict["y"])
-        uframe = hexframe_to_array(uframe_hex)
-        yframe = hexframe_to_array(yframe_hex)
-        tframe = sampling_time * (np.arange(len(yframe)) + (curr_frame - 1) * buffer)
-        y.extend(yframe)
-        u.extend(uframe)
-        t.extend(tframe)
-        line_y.set_data(t, y)
-        fig.canvas.draw()
-        time.sleep(0.1)
+        if curr_frame == 1:
+            sync = True
+        if sync:
+            uframe_hex = str(msg_dict["u"])
+            yframe_hex = str(msg_dict["y"])
+            uframe = hexframe_to_array(uframe_hex)
+            yframe = hexframe_to_array(yframe_hex)
+            tframe = sampling_time * (np.arange(len(yframe)) + (curr_frame - 1) * buffer)
+            y.extend(yframe)
+            u.extend(uframe)
+            t.extend(tframe)
+            line_y.set_data(t, y)
+            fig.canvas.draw()
+            time.sleep(0.1)
     line_y.set_data([], [])
     return u, y
 
@@ -444,7 +457,6 @@ def get_static_model(system):
     # # This is the set of step responses for obtaining steady state in speed
     delta_dz = 0.02
     u_pos = np.logspace(np.log10(dz_point - delta_dz), np.log10(5), points , endpoint=True, base=10)
-    print(u_pos)
     u_neg = -u_pos[::-1]
     u_tot = np.concatenate((u_neg, u_pos))
     exp = []
@@ -462,8 +474,7 @@ def get_static_model(system):
         yee.append(yf)
         uee.append(ui)
         line_exp.set_data(uee, yee)
-        ax.text(300, 4, 'Last voltage \nLast stationary spped$', fontsize=FONT_SIZE,
-                color='#ff0066', ha='center', va='bottom', bbox=box)
+        ax.legend([line_exp], [f'Last input voltage: {uf:0.2f} V\nLast steady state speed: {yf:0.2f} deg/s'], fontsize=FONT_SIZE, loc='upper left')
         fig.canvas.draw()
         time.sleep(0.5)
 
@@ -473,7 +484,7 @@ def get_static_model(system):
                exp, delimiter=",", fmt="%0.8f", comments="", header='u,y')
     system.disconnect()
     print("Static model esperiment has been completed")
-    return
+    return uee, yee
 
 
 def get_fomodel_step(system, yop=400, usefile=False):
@@ -551,7 +562,7 @@ def get_fomodel_step(system, yop=400, usefile=False):
     # We also need to substract the time in which the step changes
 
     t1  = np.max(roots_t1) - timestep
-    t2  =  np.mean(roots_t2) - timestep
+    t2  =  np.max(roots_t2) - timestep
     tau3 = np.mean(roots_t3) - timestep
     t4 =  np.min(roots_t4) - timestep
 
@@ -761,7 +772,6 @@ def get_models_prbs(system, yop = 400, usefile = False):
             au.cla()
 
     # settings for the upper axes, depicting the model and speed data
-    #ay.set_title('Data and estimated second order model for UNDCMotor')
     ay.set_ylabel('Speed (Degrees/s)')
     ay.grid(True)
     ay.grid(color='#1a1a1a40', linestyle='--', linewidth=0.125)
@@ -772,7 +782,6 @@ def get_models_prbs(system, yop = 400, usefile = False):
 
     # settings for the lower, depicting the input
     au.set_xlim(xlimits[0], xlimits[1])
-    #au.grid(True);
     au.set_facecolor('#d7f4ee')
     au.grid(color='#1a1a1a40', linestyle='--', linewidth=0.125)
 
@@ -784,7 +793,6 @@ def get_models_prbs(system, yop = 400, usefile = False):
     line_model2, = ay.plot(t, ysim2 + ymean, color="#ff0066", linewidth=1.5, )
 
 
-    #ay.plot(timestep + tau, ya + 0.63212 * delta_y, color="#ff0066", linewidth=1.5, marker=".", markersize=13)
     line_u, = au.plot(t, u, color="#00aa00")
     modelstr1 = r"Model $G_1(s) = \frac{%0.3f }{%0.3f\,s+1}$ ($FIT = %0.1f$" % (alpha, tau, r1) + "%)"
     modelstr2 = r"Model $G_2(s) = \frac{%0.3f }{(%0.3f\,s+1)(%0.3f\,s+1)}$ ($FIT = %0.1f$"%(alpha2, tau1, tau2, r2) + "%)"
