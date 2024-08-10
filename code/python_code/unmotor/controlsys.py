@@ -660,6 +660,7 @@ def profile_closed(system, timevalues = [0, 1, 2 ,3], refvalues = [0, 360, 360, 
         msg_dict = json.loads(decoded_message)
         frame_hex = str(msg_dict["frame"])
         curr_frame = hex2long(frame_hex)
+
         if curr_frame == 1:
             sync = True
         if sync:

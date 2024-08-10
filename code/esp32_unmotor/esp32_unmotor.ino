@@ -296,8 +296,7 @@ void suspendAllTasks(){
 
 
 void resumeControl(){
-    reset_int = true;
-    switch (typeControl) {
+      switch (typeControl) {
         case GENERAL_CONTROLLER_SPEED:
             vTaskResume(h_speedGenControlTask);
             break;
@@ -321,12 +320,12 @@ void resumeControl(){
 
 // This function activate the default controller
 void defaultControl(){
+    reset_int=true;
+     vTaskSuspend(h_publishStateTask);
     codeTopic = DEFAULT_TOPIC;
-    reset_int = true;
-    vTaskSuspend(h_publishStateTask);
-//    vTaskSuspend(h_identifyTask);
-//    vTaskSuspend(h_stepOpenTask);
     resumeControl();
+    vTaskSuspend(h_identifyTask);
+    vTaskSuspend(h_stepOpenTask);
 }
 
 // These functions handle the WiFi and mqtt communication
@@ -344,7 +343,7 @@ void connectMqtt()
         mqttClient.subscribe(USER_SYS_PRBS_OPEN);
         mqttClient.subscribe(USER_SYS_STEP_OPEN);
         mqttClient.subscribe(USER_SYS_PROFILE_CLOSED);
-        printf("now connected to broker!\n");
+        printf("now connected to broker %s !\n", BROKER);
     }
     else
     {
@@ -405,6 +404,7 @@ void IRAM_ATTR onMqttReceived(char* lastTopic, byte* lastPayload, unsigned int l
         printf("PID parameters settled:\n    kp=%0.3f\n    ki=%0.3f\n    kd=%0.3f\n    N=%0.3f\n    Beta=%0.3f\n"
                "    Dead Zone=%0.3f\n", kp, ki, kd, N, beta, deadzone);
         printf("control code: %d\n", typeControl);
+        reset_int = true;
         defaultControl();
     }
     else if(strstr(lastTopic, USER_SYS_SET_GENCON)){
@@ -449,14 +449,15 @@ void IRAM_ATTR onMqttReceived(char* lastTopic, byte* lastPayload, unsigned int l
         }
         printf("\n");
         printf("control code: %d\n", typeControl);
+        reset_int = true;
         defaultControl();
     }
 
     else if (strstr(lastTopic, USER_SYS_SET_REF)) {
         deserializeJson(doc, lastPayload);
         reference = hex2Float((const char *) doc["reference"]);
-        reset_int = true;
         printf("Reference has been set to %0.2f degrees \n", reference);
+        reset_int = true;
         defaultControl();
     }
     else if (strstr(lastTopic, USER_SYS_STEP_CLOSED )) {
@@ -467,11 +468,11 @@ void IRAM_ATTR onMqttReceived(char* lastTopic, byte* lastPayload, unsigned int l
         points_high = hex2Long((const char *) doc["points_high"]);
         points_low = hex2Long((const char *) doc["points_low"]);
         total_time = points_low + points_high;
-        reset_int = true;
         printf("Closed loop step response:\n");
         printf("    low value=%0.2f\n    high value=%0.2f\n    time in high =%0.2f\n    time in low=%0.2f\n", low_val,
                high_val, (float) (points_high * h), (float) (points_low * h));
         vTaskResume(h_publishStateTask);
+        reset_int = true;
         resumeControl();
     }
     else if (strstr(lastTopic, USER_SYS_STAIRS_CLOSED)){
@@ -484,9 +485,9 @@ void IRAM_ATTR onMqttReceived(char* lastTopic, byte* lastPayload, unsigned int l
         const char *hexSignal = doc["signal"];
         hexStringToFloatArray(stairs, hexSignal, points_stairs);
         total_time = points_stairs * duration - 1;
-        reset_int = true;
         printf("Stairs signal of %d steps  with a duration of %0.2f secs.\n", points_stairs, h * total_time);
         vTaskResume(h_publishStateTask);
+        reset_int = true;
         resumeControl();
     }
 
@@ -497,10 +498,11 @@ void IRAM_ATTR onMqttReceived(char* lastTopic, byte* lastPayload, unsigned int l
         high_val = hex2Float((const char *) doc["high_val"]);
         divider = hex2Long((const char *) doc["divider"]);
         total_time = PRBS_LENGTH * divider;
-        reset_int = true;
+
         printf("Open loop test with a prbs signal with %d steps with a duration of %0.2f secs.\n",
                total_time, (total_time-1) * h);
         vTaskResume(h_publishStateTask);
+        reset_int = true;
         vTaskResume(h_identifyTask);
     }
     else if(strstr(lastTopic, USER_SYS_STEP_OPEN )){
@@ -511,11 +513,12 @@ void IRAM_ATTR onMqttReceived(char* lastTopic, byte* lastPayload, unsigned int l
         points_high = hex2Long((const char *) doc["points_high"]);
         points_low = hex2Long((const char *) doc["points_low"]);
         total_time = points_low + points_high;
-        reset_int = true;
+        
         printf("Open loop step response:\n");
         printf("    low value=%0.2f\n    high value=%0.2f\n    time in high=%0.2f\n    time in low=%0.2f\n", low_val,
                high_val, (float) (points_high * h), (float) (points_low * h));
         vTaskResume(h_publishStateTask);
+        reset_int = true;
         vTaskResume(h_stepOpenTask);
     }
 
@@ -530,7 +533,7 @@ void IRAM_ATTR onMqttReceived(char* lastTopic, byte* lastPayload, unsigned int l
         hexStringToFloatArray(stairs, stairsHex, points_stairs);
         hexStringToLongArray(timeValues, timeValuesHex, points_stairs);
         total_time = timeValues[points_stairs - 1];
-        reset_int = true;
+        
         printf("Closed loop profile response with a duration of %0.2f secs.\n", total_time * h);
         printf("   refvalues = [ ");
         for (uint8_t  j =0; j < points_stairs; j++ ) {
@@ -543,6 +546,7 @@ void IRAM_ATTR onMqttReceived(char* lastTopic, byte* lastPayload, unsigned int l
         }
         printf("]\n");
         vTaskResume(h_publishStateTask);
+        reset_int = true;
         resumeControl();
 
     }
@@ -660,7 +664,7 @@ void computeReference() {
                 xTaskNotify(h_publishStateTask, 0b0001, eSetBits);
                 displayLed(y, low_val, high_val, 0.5, 0);
             }
-            else if (np == total_time + 1){
+            else if (np > total_time){
                 printf("Closed loop step response completed\n");
                 encoderMotor.setCount(0);
                 encoderPot.setCount(0);
@@ -677,8 +681,10 @@ void computeReference() {
                 displayLed(y, low_val, high_val, 0, 6);
 
             }
-            else if (np == total_time + 1) {
+            else if (np > total_time) {
                 printf("Stairs closed loop response completed\n");
+                encoderMotor.setCount(0);
+                encoderPot.setCount(0);
                 voltsToMotor(0);
                 defaultControl();
             }
@@ -688,10 +694,12 @@ void computeReference() {
             if (np <= total_time) {
                 reference = linearInterpolation(timeValues, stairs, points_stairs, np);
                 displayLed(y, low_val, high_val, 0, 6);
-                xTaskNotify(h_publishStateTask, 0b0001, eSetBits);
+             
             }
-            else if (np == total_time + 1) {
+            else if (np > total_time) {
                 printf("Closed loop profile response completed\n");
+                encoderMotor.setCount(0);
+                encoderPot.setCount(0);
                 voltsToMotor(0);
                 defaultControl();
             }
@@ -820,7 +828,9 @@ static void controlPidTask(void *pvParameters) {
         u = P + I +  D ; // control signal
         e = reference - y;
         v = (y - y_ant)/h;
-        if ((abs(e) <= 0.25) & (abs(v) <= 20)){
+
+        // for the default control we allow to relax the system with zero control signal
+        if ((codeTopic == DEFAULT_TOPIC ) & (abs(e) <= 0.5) & (abs(v) <= 20)){
             u=0;
              }
 
@@ -838,8 +848,10 @@ static void controlPidTask(void *pvParameters) {
 
         if (reset_int) {I=0;}
         //The task is suspended while awaiting a new samplig time
-        vTaskDelayUntil(&xLastWakeTime, taskPeriod);
-        np += 1;
+        vTaskDelayUntil(&xLastWakeTime, taskPeriod);  
+        np +=1;     
+        
+        
     }
 }
 
@@ -1051,7 +1063,6 @@ const TickType_t taskPeriod = (uint32_t) (1000 * h);
             voltsToMotor(0);
             printf("Open loop PBRS response completed\n");
             defaultControl();
-            vTaskSuspend(h_identifyTask);
         }
         vTaskDelayUntil(&xLastWakeTime, taskPeriod);
         np +=1;
@@ -1101,8 +1112,7 @@ static void stepOpenTask(void *pvParameters) {
         else if (np == total_time + 1){
             voltsToMotor( 0);
             printf("Open loop step response completed\n");
-            defaultControl();
-            vTaskSuspend(h_stepOpenTask);
+            defaultControl();           
 
         }
         vTaskDelayUntil(&xLastWakeTime, taskPeriod);
@@ -1198,7 +1208,7 @@ void setup() {
             "general control",
             8192,
             NULL,
-            23,
+            20,
             &h_generalControlTask,
             CORE_CONTROL
     );
@@ -1209,7 +1219,7 @@ void setup() {
             "speed general control",
             8192,
             NULL,
-            23,
+            20,
             &h_speedGenControlTask,
             CORE_CONTROL
     );
