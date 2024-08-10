@@ -317,7 +317,7 @@ def prbs_open(system, low_val = 2, high_val = 4, divider = 2):
             line_u.set_data(t, u)
             line_y.set_data(t, y)
             fig.canvas.draw()
-            time.sleep(0.1)
+            time.sleep(sampling_time)
 
     # preparing the matrix for storing the results of the identification experiment
     for ind in range(len(y)):
@@ -414,7 +414,7 @@ def step_open_staticgain(system, low_val=1.5, high_val=3.5, low_time=1, high_tim
             t.extend(tframe)
             line_y.set_data(t, y)
             fig.canvas.draw()
-            time.sleep(0.1)
+            time.sleep(sampling_time)
     line_y.set_data([], [])
     return u, y
 

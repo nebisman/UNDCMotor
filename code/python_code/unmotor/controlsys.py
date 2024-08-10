@@ -207,7 +207,7 @@ def step_closed(system, r0=0 , r1=100, t0=0 ,  t1=1):
     ay.legend([line_r, line_y], ['$r(t)$ (reference)', '$y(t)$ (output)'], fontsize=FONT_SIZE, loc ="lower right")
     au.legend([line_u], ['$u(t)$ (control signal)'], fontsize=FONT_SIZE, loc ="lower left")
     fig.canvas.draw()
-    time.sleep(0.1)
+    time.sleep(sampling_time)
 
 
 
@@ -247,8 +247,8 @@ def step_closed(system, r0=0 , r1=100, t0=0 ,  t1=1):
             line_y.set_data(t, y)
             line_u.set_data(t, u)
             fig.canvas.draw()
-            time.sleep(0.1)
-
+            time.sleep(sampling_time)
+    plt.ioff()
     for ind in range(len(y)):
         exp.append([t[ind], r[ind], y[ind], u[ind]])
 
@@ -347,7 +347,7 @@ def stairs_closed(system, stairs=[90, 180, 270], duration= 1.5):
     au.set_xlabel('Time (s)')
     au.set_ylabel('Volts (V)')
     fig.canvas.draw()
-    time.sleep(0.1)
+    time.sleep(sampling_time)
 
 
     # This is the queue of messages filled by the stair_message callback
@@ -392,7 +392,7 @@ def stairs_closed(system, stairs=[90, 180, 270], duration= 1.5):
             line_y.set_data(t, y)
             line_u.set_data(t, u)
             fig.canvas.draw()
-            time.sleep(0.1)
+            time.sleep(sampling_time)
     #we save the results from the experiment
     for ind in range(len(y)):
         exp.append([t[ind], r[ind], y[ind], u[ind]])
@@ -633,7 +633,7 @@ def profile_closed(system, timevalues = [0, 1, 2 ,3], refvalues = [0, 360, 360, 
     line_y.set_data(t, y)
     line_u.set_data(t, u)
     fig.canvas.draw()
-    time.sleep(0.1)
+    time.sleep(sampling_time)
 
 
     # This is the queue of messages filled by the stair_message callback
@@ -677,7 +677,7 @@ def profile_closed(system, timevalues = [0, 1, 2 ,3], refvalues = [0, 360, 360, 
             line_y.set_data(t, y)
             line_u.set_data(t, u)
             fig.canvas.draw()
-            time.sleep(0.1)
+            time.sleep(sampling_time)
 
     # we save the results from the experiment
     for ind in range(len(y)):
