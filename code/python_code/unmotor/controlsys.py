@@ -171,6 +171,7 @@ def step_closed(system, r0=0 , r1=100, t0=0 ,  t1=1):
     # Setting the graphics configuration for visualizing the experiment
 
     with plt.ioff():
+        plt.close('all')
         fig, (ay, au) = plt.subplots(nrows=2, ncols=1, width_ratios=[1], height_ratios=[4, 1], figsize=(10, 6))
     display_immediately(fig)
 
@@ -321,6 +322,7 @@ def stairs_closed(system, stairs=[90, 180, 270], duration= 1.5):
     # Setting the graphics configuration for visualizing the experiment
 
     with plt.ioff():
+        plt.close('all')
         fig, (ay, au) = plt.subplots(nrows=2, ncols=1, width_ratios=[1], height_ratios=[4, 1], figsize=(10, 6))
     display_immediately(fig)
 
@@ -604,6 +606,7 @@ def profile_closed(system, timevalues = [0, 1, 2 ,3], refvalues = [0, 360, 360, 
     # Setting the graphics configuration for visualizing the experiment
 
     with plt.ioff():
+        plt.close('all')
         fig, (ay, au) = plt.subplots(nrows=2, ncols=1, width_ratios=[1], height_ratios=[4, 1], figsize=(10, 6))
     display_immediately(fig)
 

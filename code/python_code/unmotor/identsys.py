@@ -91,6 +91,7 @@ def step_open(system, u0=1.5, u1=3.5, t0=1, t1=1):
 
     # display config
     with plt.ioff():
+        plt.close('all')
         fig, (yax, uax) = plt.subplots(nrows=2, ncols=1, width_ratios=[1], height_ratios=[4, 1], figsize=(10, 6))
     display_immediately(fig)
 
@@ -222,6 +223,7 @@ def prbs_open(system, low_val = 2, high_val = 4, divider = 2):
     # Setting the graphics configuration for visualizing the experiment
     print("Starting experiment, please wait...")
     with plt.ioff():
+        plt.close('all')
         fig, (yax, uax) = plt.subplots(nrows=2, ncols=1, width_ratios=[1], height_ratios=[3, 1], figsize=(10, 6))
     display_immediately(fig)
 
@@ -429,6 +431,7 @@ def get_static_model(system):
     uee = []
 
     with plt.ioff():
+        plt.close('all')
         fig, ax = plt.subplots(figsize=(10, 6))
     display_immediately(fig)
 
