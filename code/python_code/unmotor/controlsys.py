@@ -230,6 +230,7 @@ def step_closed(system, r0=0 , r1=100, t0=0 ,  t1=1):
         msg_dict = json.loads(decoded_message)
         frame_hex = str(msg_dict["frame"])
         curr_frame = hex2long(frame_hex)
+        print(curr_frame)
         if curr_frame == 1:
             sync = True
         if sync:
