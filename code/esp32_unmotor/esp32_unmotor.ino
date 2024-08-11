@@ -320,9 +320,9 @@ void resumeControl(){
 
 // This function activate the default controller
 void defaultControl(){
-    reset_int=true;
-     vTaskSuspend(h_publishStateTask);
+    vTaskSuspend(h_publishStateTask);
     codeTopic = DEFAULT_TOPIC;
+    reset_int=true;
     resumeControl();
     vTaskSuspend(h_identifyTask);
     vTaskSuspend(h_stepOpenTask);
