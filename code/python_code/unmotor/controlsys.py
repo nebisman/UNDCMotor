@@ -225,12 +225,12 @@ def step_closed(system, r0=0 , r1=100, t0=0 ,  t1=1):
         try:
             message = q.get(True, 20* buffer * sampling_time)
         except:
+            system.disconnect()
             raise TimeoutError("The connection has been lost. Please try again")
         decoded_message = str(message.payload.decode("utf-8"))
         msg_dict = json.loads(decoded_message)
         frame_hex = str(msg_dict["frame"])
         curr_frame = hex2long(frame_hex)
-        print(str(msg_dict)+"\n")
 
         if curr_frame == 1:
             sync = True
@@ -369,6 +369,7 @@ def stairs_closed(system, stairs=[90, 180, 270], duration= 1.5):
             message = q.get(True, 20 * buffer * sampling_time)
         except:
             # else we raise a communication error
+            system.disconnect()
             raise TimeoutError("The connection has been lost. Please try again")
 
         # decoding the message
@@ -655,6 +656,7 @@ def profile_closed(system, timevalues = [0, 1, 2 ,3], refvalues = [0, 360, 360, 
             message = q.get(True, 20 * buffer * sampling_time)
         except:
             # else we raise a communication error
+            system.disconnect()
             raise TimeoutError("The connection has been lost. Please try again")
 
         # decoding the message
