@@ -100,7 +100,7 @@ class MotorSystemIoT:
     def subscribe(self, topic, qos=2):
         self.client.subscribe(topic, qos)
 
-    def publish(self, topic, message, qos=2):
+    def publish(self, topic, message, qos=1):
         self.client.publish(topic, message, qos)
 
     def transfer_function(self, output='position', min_order=True):
