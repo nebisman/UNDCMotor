@@ -118,7 +118,7 @@ def step_open(system, u0=1.5, u1=3.5, t0=1, t1=1):
     pu = 0.1
     ulimits = [low_val, high_val]
     ylimits = system.speed_from_volts(ulimits)
-    ylimits = [np.min(ylimits)-20, np.max(ylimits)]
+    ylimits = [np.min(ylimits)-50, np.max(ylimits)+50]
     ulimits = [np.min(ulimits), np.max(ulimits)]
     delta_u = ulimits[1] - ulimits[0]
     uax.set_ylim(ulimits[0] - pu*delta_u, ulimits[1] + pu*delta_u)
@@ -451,7 +451,7 @@ def get_static_model(system):
     ax.set_xlim(-5, 5)
     ax.set_ylim(-780, 780)
     box = dict(boxstyle='round,pad=0.5', facecolor='white', edgecolor='white', alpha=0.5)
-
+    fig.canvas.draw()
 
 
 
