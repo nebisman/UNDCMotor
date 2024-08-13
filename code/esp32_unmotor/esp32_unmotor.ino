@@ -356,7 +356,7 @@ void connectWiFi(){
 
     #ifdef UNALCONNECTION
         WiFi.begin(WIFI_SSID);
-        printf("\nConnecting to UNAL network, please wait\n");
+        printf("\nPlant %s is connecting to UNAL network, please wait\n", PLANT_NUMBER);
     #else    
         WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
         printf("Connecting to WiFi network %s, please wait\n", WIFI_SSID);
@@ -548,7 +548,6 @@ void IRAM_ATTR onMqttReceived(char* lastTopic, byte* lastPayload, unsigned int l
         vTaskResume(h_publishStateTask);
         reset_int = true;
         resumeControl();
-
     }
 }
 
@@ -664,7 +663,7 @@ void computeReference() {
                 xTaskNotify(h_publishStateTask, 0b0001, eSetBits);
                 displayLed(y, low_val, high_val, 0.5, 0);
             }
-            else if (np > total_time){
+            else if (np == total_time + 1){
                 printf("Closed loop step response completed\n");
                 encoderMotor.setCount(0);
                 encoderPot.setCount(0);
@@ -681,7 +680,7 @@ void computeReference() {
                 displayLed(y, low_val, high_val, 0, 6);
 
             }
-            else if (np > total_time) {
+            else if (np == total_time + 1) {
                 printf("Stairs closed loop response completed\n");
                 encoderMotor.setCount(0);
                 encoderPot.setCount(0);
@@ -696,7 +695,7 @@ void computeReference() {
                 displayLed(y, low_val, high_val, 0, 6);
              
             }
-            else if (np > total_time) {
+            else if (np == total_time + 1) {
                 printf("Closed loop profile response completed\n");
                 encoderMotor.setCount(0);
                 encoderPot.setCount(0);
@@ -1062,6 +1061,7 @@ const TickType_t taskPeriod = (uint32_t) (1000 * h);
         else if (np == total_time + 1) {
             voltsToMotor(0);
             printf("Open loop PBRS response completed\n");
+            encoderMotor.clearCount();
             defaultControl();
         }
         vTaskDelayUntil(&xLastWakeTime, taskPeriod);
@@ -1109,10 +1109,11 @@ static void stepOpenTask(void *pvParameters) {
             xTaskNotify(h_publishStateTask, 0b0010, eSetBits);
             displayLed(u, -5 ,5, 0.2, 0);
         }
-        else if (np == total_time + 1){
+        else if (np == total_time + 1 ){
             voltsToMotor( 0);
             printf("Open loop step response completed\n");
-            defaultControl();           
+            vTaskSuspend(h_publishStateTask);
+            vTaskSuspend(h_stepOpenTask);
 
         }
         vTaskDelayUntil(&xLastWakeTime, taskPeriod);
