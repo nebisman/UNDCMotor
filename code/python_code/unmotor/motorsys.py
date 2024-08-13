@@ -146,7 +146,7 @@ class MotorSystemIoT:
             raise ValueError(f"The speed input must be in the interval {y[0]} to {y[-1]}")
         return uc
 
-def read_csv_file(filepath= PATH_DATA + 'DCmotor_static_gain_response.csv'):
+def read_csv_file(filepath= PATH_DEFAULT + 'DCmotor_static_gain_response.csv'):
     with open(filepath , newline='') as file:
         reader = csv.reader(file)
         # Iterate over each row in the CSV file
