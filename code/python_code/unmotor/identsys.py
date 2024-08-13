@@ -139,6 +139,7 @@ def step_open(system, u0=1.5, u1=3.5, t0=1, t1=1):
         try:
             message = q.get(True, 20* buffer * sampling_time)
         except:
+            system.disconnect()
             raise TimeoutError("The connection has been lost. Please try again")
 
         decoded_message = str(message.payload.decode("utf-8"))
@@ -275,6 +276,7 @@ def prbs_open(system, low_val = 2, high_val = 4, divider = 2):
             message = q.get(True, 20 * buffer * sampling_time)
         except:
             # after ten seconds we raise a timeout
+            system.disconnect()
             raise TimeoutError("The connection has been lost. Please try again")
 
         # this es the current received  message
@@ -398,6 +400,7 @@ def step_open_staticgain(system, low_val=1.5, high_val=3.5, low_time=1, high_tim
         try:
             message = q.get(True, 20* buffer * sampling_time)
         except:
+            system.disconnect()
             raise TimeoutError("The connection has been lost. Please try again")
         decoded_message = str(message.payload.decode("utf-8"))
         msg_dict = json.loads(decoded_message)
@@ -455,7 +458,7 @@ def get_static_model(system):
     # These are the parameters for obtaining the actuator response
     timestep = 3
     points = 20
-    dz_point = 0.32
+    dz_point = 0.3
 
     # # This is the set of step responses for obtaining steady state in speed
     delta_dz = 0.02
@@ -467,8 +470,9 @@ def get_static_model(system):
         try:
             u, y = step_open_staticgain(system, 0, ui,0, timestep)
         except:
-            time.sleep(2)
+            time.sleep(4)
             u, y = step_open_staticgain(system, 0, ui, 0, timestep)
+
 
 
         yf = np.mean(y[-50:])
@@ -527,6 +531,7 @@ def get_fomodel_step(system, yop=400, usefile=False):
         try:
             t, u, y = step_open(system, ua, ub, timestep, timestep)
         except:
+            system.disconnect()
             raise TimeoutError("The connection has been lost. Please try again")
     # we get the step response near to operation point
     t, u, y = read_csv_file3(PATH_DATA + 'DCmotor_step_open_exp.csv')
@@ -705,6 +710,7 @@ def get_models_prbs(system, yop = 400, usefile = False):
         try:
             prbs_open(system, low_val=ua, high_val=ub, divider=4)
         except:
+            system.disconnect()
             raise TimeoutError("The connection has been lost. Please try again")
 
     t, u, y = read_csv_file3(PATH_DATA + 'DCmotor_prbs_open_exp.csv')
