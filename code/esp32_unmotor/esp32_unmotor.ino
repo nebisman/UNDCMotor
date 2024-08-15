@@ -353,13 +353,12 @@ void connectMqtt()
 void connectWiFi(){
     WiFi.disconnect(true);
     WiFi.mode(WIFI_STA);
-
     #ifdef UNALCONNECTION
         WiFi.begin(WIFI_SSID);
         printf("\nPlant %s is connecting to UNAL network, please wait\n", PLANT_NUMBER);
     #else    
         WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-        printf("Connecting to WiFi network %s, please wait\n", WIFI_SSID);
+        printf("Plant %s is connecting to %s network , please wait\n", PLANT_NUMBER, WIFI_SSID);
     #endif
     
     while (WiFi.status() != WL_CONNECTED) {
@@ -377,11 +376,12 @@ void handleConnections(void *pvParameters) {
     for (;;) {
         if (WiFi.status() != WL_CONNECTED) {
             connectWiFi();
+            if (!mqttClient.connected()) {
+                vTaskDelay(500);
+                connectMqtt();
+            }
         }
-        if (!mqttClient.connected()) {
-            vTaskDelay(3000);
-            connectMqtt();
-        }
+
         mqttClient.loop();
         vTaskDelay(pdMS_TO_TICKS(500));
     }
