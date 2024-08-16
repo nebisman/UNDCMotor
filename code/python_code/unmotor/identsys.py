@@ -92,7 +92,7 @@ def step_open(system, u0=1.5, u1=3.5, t0=1, t1=1):
     # display config
     with plt.ioff():
         plt.close('all')
-        fig, (yax, uax) = plt.subplots(nrows=2, ncols=1, width_ratios=[1], height_ratios=[2, 1], figsize=(10, 6))
+        fig, (yax, uax) = plt.subplots(nrows=2, ncols=1, width_ratios=[1], height_ratios=[3, 1], figsize=(10, 6))
     display_immediately(fig)
 
     yax.set_title(f'Experiment of Step response with a duration of {total_points * sampling_time: 0.2f} seconds', fontsize=FONT_SIZE)
