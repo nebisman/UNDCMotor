@@ -125,8 +125,8 @@ def step_open(system, u0=1.5, u1=3.5, t0=1, t1=1):
     uax.set_xlim(0, sampling_time * (total_points - 1))
     yax.set_xlim(0, sampling_time * (total_points - 1))
     yax.set_ylim(ylimits[0] - 25, ylimits[1] + 50)
-    fig.canvas.draw()
-    time.sleep(sampling_time)
+    # fig.canvas.draw()
+    # time.sleep(sampling_time)
 
     # this is the queue of messages filled by the step_message callback
     q = Queue()
