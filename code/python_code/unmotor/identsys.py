@@ -427,7 +427,7 @@ def step_open_staticgain(system, low_val=1.5, high_val=3.5, low_time=1, high_tim
 
 
 
-def get_static_model(system):
+def get_static_model(system, points = 30):
 
     # This is the configuration for the figure displayed while acquiring data
     yee = []
@@ -457,7 +457,6 @@ def get_static_model(system):
 
     # These are the parameters for obtaining the actuator response
     timestep = 3
-    points = 20
     dz_point = 0.3
 
     # # This is the set of step responses for obtaining steady state in speed
