@@ -691,10 +691,10 @@ def get_models_prbs(system, yop = 400, usefile = False):
         ub = system.volts_from_speed(yop + sigma)
     elif -200 < yop < 0:
         ua = system.volts_from_speed(-200)
-        ub = system.volts_from_speed(-50)
+        ub = system.volts_from_speed(-100)
     elif 0 <= yop < 200:
         ua = system.volts_from_speed(200)
-        ub = system.volts_from_speed(50)
+        ub = system.volts_from_speed(100)
     elif 200 <= yop < ymax - sigma:
         ua = system.volts_from_speed(yop + sigma)
         ub = system.volts_from_speed(yop - sigma)
