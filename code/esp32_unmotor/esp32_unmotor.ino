@@ -353,13 +353,9 @@ void connectMqtt()
 void connectWiFi(){
     WiFi.disconnect(true);
     WiFi.mode(WIFI_STA);
-    #ifdef UNALCONNECTION
-        WiFi.begin(WIFI_SSID);
-        printf("\nPlant %s is connecting to UNAL network, please wait\n", PLANT_NUMBER);
-    #else    
-        WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-        printf("Plant %s is connecting to %s network , please wait\n", PLANT_NUMBER, WIFI_SSID);
-    #endif
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    printf("Plant %s is connecting to %s network , please wait\n", PLANT_NUMBER, WIFI_SSID);
+
     
     while (WiFi.status() != WL_CONNECTED) {
         Serial.print(".");
@@ -376,10 +372,10 @@ void handleConnections(void *pvParameters) {
     for (;;) {
         if (WiFi.status() != WL_CONNECTED) {
             connectWiFi();
-            if (!mqttClient.connected()) {
-                vTaskDelay(500);
-                connectMqtt();
-            }
+        }
+        if (!mqttClient.connected()) {
+            vTaskDelay(2000);
+            connectMqtt();
         }
 
         mqttClient.loop();
@@ -1111,6 +1107,7 @@ static void stepOpenTask(void *pvParameters) {
         }
         else if (np == total_time + 1 ){
             voltsToMotor( 0);
+            encoderMotor.clearCount();
             printf("Open loop step response completed\n");
             vTaskSuspend(h_publishStateTask);
             vTaskSuspend(h_stepOpenTask);
