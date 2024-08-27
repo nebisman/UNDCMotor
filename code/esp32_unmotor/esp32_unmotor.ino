@@ -688,6 +688,8 @@ void computeReference() {
         case USER_SYS_PROFILE_CLOSED_INT:
             if (np <= total_time) {
                 reference = linearInterpolation(timeValues, stairs, points_stairs, np);
+                // sending the indication for publishing
+                xTaskNotify(h_publishStateTask, 0b0001, eSetBits);
                 displayLed(y, low_val, high_val, 0, 6);
              
             }
