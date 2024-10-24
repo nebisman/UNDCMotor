@@ -2,10 +2,7 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.integrate import odeint
-from scipy.optimize import minimize
-from scipy.interpolate import interp1d, PchipInterpolator
-
+from scipy.optimize import minimize, lsq_linear
 from scipy.stats import linregress
 import control as ct
 from .motorsys import MotorSystemIoT, PATH_DATA, PATH_DEFAULT, FONT_SIZE
@@ -38,7 +35,7 @@ def read_csv_file3(filepath):
                u.append(float(row[1]))
                y.append(float(row[2]))
             num_line += 1
-        return t, u, y
+        return np.array(t), np.array(u), np.array(y)
 
 
 
@@ -497,6 +494,14 @@ def get_fomodel_step(system, yop=400, usefile=False):
     """This function allows to obtain the first order model
     from the step response"""
 
+    def compute_step_response(t, alpha, tau, L, delta_u, ya):
+    # this function computes the atep responseof a FOTD system given the parameters, alpha, tau and L
+        ym = []
+        for ti in t:
+            yi = alpha * delta_u * (1 - np.exp(-np.max([0, ti-L]) / tau)) + ya
+            ym.append(yi)
+        return ym
+
     ymax = system.speed_from_volts(5)
     ymin = system.speed_from_volts(-5)
     sigma = 50  # this is the deviation from the operation point
@@ -535,61 +540,73 @@ def get_fomodel_step(system, yop=400, usefile=False):
     # we get the step response near to operation point
     t, u, y = read_csv_file3(PATH_DATA + 'DCmotor_step_open_exp.csv')
 
-    # we interpolate the experimental response
-    interp = PchipInterpolator(t, y)
+    ind_step = np.diff(u).argmax()
 
-    # we estimate the steady state speeds achieved during the initial value of step.
-    ta = [t0 for t0 in t if t0 > timestep - 1 and t0 < timestep]
-    ya = np.mean(interp(ta))
+    # we cut the initial transitory response
+    y = y[ind_step-50:]    
+    u = u[ind_step-50:]
+    t = t - t[ind_step]
+    t = t[ind_step-50:] 
 
-    # we estimate the steady state speeds achieved during the final value of the step.
-    tb = [t0 for t0 in t if t0 > 2*timestep - 1 and t0 < 2 * timestep]
-    yb = np.mean(interp(tb))
 
-    # we use the mean value theorem to approximate the gain of the motor
+    tend = t[-1]
+    # This is the initial step value before the change
+    ua = u[0]
+
+    # The last point is the final step value
+    ub = u[-1]
+
+    # We calculate the initial temperature value before the step change
+    # as the average of the 50 points before the change
+    ya = np.mean(y[0:50])
+
+    # For the final temperature value, we take an average of the last 10 values
+    yb = np.mean(y[-50:])
+
+    # We calculate the net change in the step
+    delta_u = ub - ua
+
+    # We calculate the change in steady-state output value
+    delta_y = yb - ya
+
+
+    # we calculate the gain of the plant
     delta_y = yb - ya
     delta_u = ub - ua
+  
+    print(ua ,ub)
+    print(ya,yb)
+
+     
+    # We compute the normalized response
+    y_norm = (y - ya) / delta_y
+
+
+    # we set the selected points in the normalized curve
+    yi_points = [0.1, 0.2, 0.3, 0.4]
+    ti_points = np.interp(yi_points, y_norm, t) 
+
+  
+    # this is the matrix for solving the LSQ system
+    A = np.array([
+        [1, -np.log(1-yi_points[0])],
+        [1, -np.log(1-yi_points[1])],
+        [1, -np.log(1-yi_points[2])],
+        [1, -np.log(1-yi_points[3])],
+
+    ])
+
+    # we solve the LSQ allowing only positive solutions
+    limits = [(0,0),(0.1,1)]
+    p = lsq_linear(A, ti_points, bounds=limits)
+
+    # we extract the parameter
+    L, tau = p.x   
+    #compute alpha
     alpha = delta_y / delta_u
 
-    #  We use four point of the the step response
-
-    y_t1  = ya + 0.2 * delta_y
-    y_t2  = ya + 0.4 * delta_y
-    y_t3  = ya + 0.63212 * delta_y
-    y_t4  = ya + 0.8 * delta_y
-
-    # with this value, we can approximate the value of tau
-    # solving the inverse equation by means of the interpolator
-    roots_t1 = interp.solve(y_t1, extrapolate=False)
-    roots_t2 = interp.solve(y_t2, extrapolate=False)
-    roots_t3 = interp.solve(y_t3, extrapolate=False)
-    roots_t4 = interp.solve(y_t4, extrapolate=False)
-
-    # We take the maximum value of the roots in the event that the noise produces multiple values.
-    # We also need to substract the time in which the step changes
-
-    t1  = np.max(roots_t1) - timestep
-    t2  =  np.max(roots_t2) - timestep
-    tau3 = np.mean(roots_t3) - timestep
-    t4 =  np.min(roots_t4) - timestep
-
-    # We obtain 4 estimates of tau in 4 different points
-    tau1 = t1 / 0.2231
-    tau2 = t2 / 0.5108
-    tau4 = t4 /1.6094
-
-    # we average the 4 estimated values for obtainig tau
-    tau = (tau1 + tau2 + tau3 + tau4)/4
-
-    # we build the model
-    G = ct.tf(alpha, [tau, 1])
-
-    # we calculate the step response from the model
-    um = np.array(u) - u[0]  # it is required to compute the LTI model with a signal starting in 0.
-    tm, ym = ct.forced_response(G, t, um)
-
-    # we add the initial speed to compare
-    ym = ym + ya
+    # we conpute the response of the linear model for comparison with data
+    ymodel = compute_step_response(t, alpha, tau, L, delta_u, ya)
 
     if usefile:
         with plt.ioff():
@@ -604,6 +621,7 @@ def get_fomodel_step(system, yop=400, usefile=False):
             ay, au = fig.get_axes()
             ay.cla()
             au.cla()
+            
 
 
     # settings for the upper axes, depicting the model and speed data
@@ -612,38 +630,37 @@ def get_fomodel_step(system, yop=400, usefile=False):
     ay.grid(True);
     ay.grid(color='#1a1a1a40', linestyle='--', linewidth=0.25)
     ay.set_facecolor('#f4eed7')
-    ay.set_xlim(0, 2*timestep)
+    ay.set_xlim(-1, timestep)
     box = dict(boxstyle='round,pad=0.5', facecolor='white', edgecolor='white', alpha=0.5)
-    ay.text(timestep + tau + 1, (ya+yb)/2, r'$\Delta_{y,e}=%0.3f$'%delta_y, fontsize=FONT_SIZE, color='#ff0066',
+    ay.text(tau + 1, (ya+yb)/2, r'$\Delta_y=%0.3f$'%delta_y, fontsize=FONT_SIZE, color='#ff0066',
              ha='center', va='bottom', bbox=box)
-    ay.text(timestep + tau + 0.2, ya + 0.63212*delta_y,  r'$\tau = %0.3f$'%tau, fontsize=FONT_SIZE, color='#ff0066')
+    ay.text(tau + 0.2, ya + 0.63212*delta_y,  r'$\tau = %0.3f$'%tau, fontsize=FONT_SIZE, color='#ff0066')
     ay.set_ylabel('Speed (Deg/s)')
     # settings for the lower, depicting the input
-    au.set_xlim(0, 2 *timestep)
+    au.set_xlim(-1, timestep)
     au.grid(True);
     au.set_facecolor('#d7f4ee')
     au.grid(color='#1a1a1a40', linestyle='--', linewidth=0.25)
-    au.text(timestep + 1, (ua+ub)/2, r'$\Delta_u=%0.2f$'%delta_u, fontsize=FONT_SIZE, color="#00aa00",
+    au.text(1, (ua+ub)/2, r'$\Delta_u=%0.3f$'%delta_u, fontsize=FONT_SIZE, color="#00aa00",
              ha='center', va='bottom', bbox=box)
     au.set_xlabel('Time (s)')
     au.set_ylabel('Volts (V)')
 
-
     line_exp, = ay.plot(t, y, color="#0088aa", linewidth=1.5, linestyle=(0, (1, 1)))
-    line_mod, = ay.plot(tm, ym, color="#ff0066", linewidth=1.5, )
-    ay.plot(timestep + tau, ya + 0.63212*delta_y , color="#ff0066", linewidth=1.5, marker=".", markersize=13)
+    line_mod, = ay.plot(t, ymodel, color="#ff0066", linewidth=1.5, )
+    ay.plot( tau, np.interp(tau, t, ymodel), color="#ff0066", linewidth=1.5, marker=".", markersize=13)
     line_u, = au.plot(t, u, color="#00aa00")
-    modelstr = r"Model $G(s)= \frac{\alpha_m}{\tau_m\,s + 1} = \frac{%0.3f }{%0.3f\,s+1}$" %(alpha, tau)
+    modelstr = r"Model $G(s)= \frac{\alpha_m}{\tau_m\,s + 1}\, e^{L\,s} = \frac{%0.3f }{%0.3f\,s+1}\, e^{%0.3f\,s}$" %(alpha, tau, L)
 
     ay.legend([line_exp, line_mod], ['Data', modelstr], fontsize=FONT_SIZE)
     au.legend([line_u], ['Input'], fontsize = FONT_SIZE)
 
-    exp = [[alpha, tau]]
-    np.savetxt(PATH_DATA + "DCmotor_fomodel_step.csv", exp, delimiter=",", fmt="%0.8f", comments="", header='alpha, tau')
+    exp = [[alpha, tau, L]]
+    np.savetxt(PATH_DATA + "DCmotor_fomodel_step.csv", exp, delimiter=",", fmt="%0.8f", comments="", header='alpha, tau, L')
     np.savetxt(PATH_DEFAULT + "DCmotor_fomodel_step.csv", exp, delimiter=",", fmt="%0.8f", comments="",
-               header='alpha, tau')
+               header='alpha, tau, L')
     system.disconnect()
-    return G
+    return alpha, tau, L
 
 
 def get_models_prbs(system, yop = 400, usefile = False):
