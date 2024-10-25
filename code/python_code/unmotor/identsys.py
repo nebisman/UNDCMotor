@@ -471,8 +471,13 @@ def get_static_model(system, points = 30):
 
 
 
+
         yf = np.mean(y[-50:])
         uf = u[-1]
+
+        if (abs(yf) <= 10) & (uf > 0.5):
+            continue
+
         exp.append([uf, yf])
         yee.append(yf)
         uee.append(ui)
