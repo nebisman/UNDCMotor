@@ -335,6 +335,7 @@ void connectMqtt()
     printf("Starting MQTT connection...");
     if (mqttClient.connect(THINGNAME))
     {
+        
         mqttClient.subscribe(USER_SYS_SET_PID);
         mqttClient.subscribe(USER_SYS_SET_GENCON);
         mqttClient.subscribe(USER_SYS_SET_REF);
