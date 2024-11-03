@@ -335,7 +335,7 @@ void connectMqtt()
     printf("Starting MQTT connection...");
     if (mqttClient.connect(THINGNAME))
     {
-        
+
         mqttClient.subscribe(USER_SYS_SET_PID);
         mqttClient.subscribe(USER_SYS_SET_GENCON);
         mqttClient.subscribe(USER_SYS_SET_REF);
@@ -709,7 +709,7 @@ void computeReference() {
 
 static void speedControlPidTask(void *pvParameters) {
     /* this function computes a two parameter PID control with Antiwindup
-     See Astrom ans Murray
+     See Astrom ans Murray Feedback Systems: an Introduction for Scientists and Engineers
     */
     static bool led_status = false;
     const TickType_t taskPeriod = (pdMS_TO_TICKS(1000*h));
@@ -810,12 +810,10 @@ static void controlPidTask(void *pvParameters) {
             continue;
         }
         y = encoderMotor.getCount() * pulses2degrees;
-        // computing the current reference depending of the current command
+        // computing the current reference depending on the current command
         computeReference();
-        // updating error
-
-
         /** updating controller parameters if they changed */
+        
         // integral action scaled to sampling time
         bi = ki*h;
         // filtered derivative constant
@@ -845,7 +843,7 @@ static void controlPidTask(void *pvParameters) {
         y_ant = y;
 
         if (reset_int) {I=0;}
-        //The task is suspended while awaiting a new samplig time
+        //The task is suspended while awaiting a new sampling time
         vTaskDelayUntil(&xLastWakeTime, taskPeriod);  
         np +=1;     
         
@@ -860,10 +858,10 @@ float computeController(float limit, bool type){
            x[n+1] = (A - L * C) * x[k] + (B - L * D) * [r[n] y[n]]^T + L *u[n]
        where A, B, C ,D are the state equation matrices and L is the observer's gain for antiwindup,
        r[n] and y[n] are, respectively, the current reference and the current temperature
-       of the thermal system
+       of the system
 
-       0 - 1par
-       1 -
+       0 - 1 DOF
+       1 - 2 DOF
     */
 
     static float X[10] = {0};
