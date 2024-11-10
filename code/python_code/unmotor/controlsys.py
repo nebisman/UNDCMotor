@@ -188,7 +188,7 @@ def step_closed(system, r0=0 , r1=100, t0=0 ,  t1=1):
     ay.set_xlabel('Time(s)')
 
     #Setting the limits of figure
-    py = 0.8
+    py = 0.6
     delta_r = abs(r1 - r0)
     ylimits = [r0 , r1]
     ylimits = [np.min(ylimits), np.max(ylimits)]
@@ -251,8 +251,7 @@ def step_closed(system, r0=0 , r1=100, t0=0 ,  t1=1):
             line_u.set_data(t, u)
             fig.canvas.draw()
             time.sleep(sampling_time)
-    deltaymax = np.max(y) - np.min(y)
-    ay.set_ylim([np.min(y)-0.1*deltaymax, np.max(y)+0.1*deltaymax])
+    ay.set_ylim([r0 - 0.05*delta_r, np.max(y) + 0.05*delta_r])
     plt.ioff()
     for ind in range(len(y)):
         exp.append([t[ind], r[ind], y[ind], u[ind]])

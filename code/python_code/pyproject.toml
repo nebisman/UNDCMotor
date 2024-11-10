@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "unmotor"
 authors = [{name = "Leonardo Bermeo", email = "lbermeoc@unal.edu.co"}]
-description = "undcmotor is a package designed for interacting with DC motor via IoT technology."
+description = "unmotor is a package designed for interacting with DC motor via IoT technology."
 version = "0.1.13"
 readme = "README.md"
 
@@ -17,7 +17,8 @@ dependencies = [
     "numpy",
     "matplotlib",
     "scipy",
-    "ipympl"
+    "ipympl",
+    "mplcursors"
 ]
 [tool.setuptools.packages.find]
 where = ["."]
