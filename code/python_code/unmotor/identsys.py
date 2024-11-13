@@ -655,7 +655,7 @@ def get_fomodel_step(system, yop=400, usefile=False):
     line_mod, = ay.plot(t, ymodel, color="#ff0066", linewidth=1.5, )
     ay.plot( tau, np.interp(tau, t, ymodel), color="#ff0066", linewidth=1.5, marker=".", markersize=13)
     line_u, = au.plot(t, u, color="#00aa00")
-    modelstr = r"Model $G(s)= \frac{\alpha_m}{\tau_m\,s + 1}\, e^{L\,s} = \frac{%0.3f }{%0.3f\,s+1}\, e^{%0.3f\,s}$" %(alpha, tau, L)
+    modelstr = r"Model $G(s)= \frac{\alpha_m}{\tau_m\,s + 1}\, e^{-L\,s} = \frac{%0.3f }{%0.3f\,s+1}\, e^{-%0.3f\,s}$" %(alpha, tau, L)
 
     ay.legend([line_exp, line_mod], ['Data', modelstr], fontsize=FONT_SIZE)
     au.legend([line_u], ['Input'], fontsize = FONT_SIZE)
