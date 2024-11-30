@@ -758,10 +758,11 @@ static void speedControlPidTask(void *pvParameters) {
         if (abs(reference) <= 10 ){
             u = 0;
         }
-        //saturated control signal
-        usat = constrain(u, -5, 5);
+
         // sending the control signal to motor
+        usat =  constrain(u, -5 , 5);
         voltsToMotor(usat);
+
 
         // updating integral action
         if (ki != 0) {
@@ -853,7 +854,7 @@ static void controlPidTask(void *pvParameters) {
 
 
 float computeController(float limit, bool type){
-    /* This function computes a general controlller for the thermal system
+    /* This function computes a general controlller for the motor system
        The controller is defined by the state equation
            x[n+1] = (A - L * C) * x[k] + (B - L * D) * [r[n] y[n]]^T + L *u[n]
        where A, B, C ,D are the state equation matrices and L is the observer's gain for antiwindup,
