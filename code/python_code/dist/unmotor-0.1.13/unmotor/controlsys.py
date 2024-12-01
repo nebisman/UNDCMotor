@@ -244,8 +244,8 @@ def step_closed(system, r0=0 , r1=100, t0=0 ,  t1=1):
             line_u.set_data(t, u)
             plt.draw()
             plt.pause(sampling_time)
-
-
+    ay.set_ylim([r0 - 0.1*delta_r, np.max([r1 + 0.22*delta_r, np.max(y) + 0.1*delta_r])])
+    plt.ioff()
 
 
 
