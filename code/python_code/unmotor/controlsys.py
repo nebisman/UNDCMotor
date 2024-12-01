@@ -251,7 +251,7 @@ def step_closed(system, r0=0 , r1=100, t0=0 ,  t1=1):
             line_u.set_data(t, u)
             fig.canvas.draw()
             time.sleep(sampling_time)
-    ay.set_ylim([r0 - 0.05*delta_r, np.max(y) + 0.05*delta_r])
+    ay.set_ylim([r0 - 0.1*delta_r, np.max([r1 + 0.22*delta_r, np.max(y) + 0.1*delta_r])])
     plt.ioff()
     for ind in range(len(y)):
         exp.append([t[ind], r[ind], y[ind], u[ind]])
