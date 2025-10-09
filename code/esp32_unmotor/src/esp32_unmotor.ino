@@ -543,17 +543,20 @@ void setup() {
     );
     vTaskSuspend(h_publishStateTask);
 
-
+    vTaskDelay(100);
     // This is a task for the minimal UI of the board
     xTaskCreatePinnedToCore(
         buttonTask, // nombre de la rutina
         "activate motor with the buttons",
-        4192,
+         4192,
         NULL,
         10,  // definimos una prioridad baja para esta tarea
         &h_buttonTask,
         CORE_CONTROL // la vamos a ejecutar en el CORE_0 que es comparte tareas con el procesador, baja prioridad
     );
+
+     vTaskSuspend(h_buttonTask);
+
 
     // Creating the task for PID control in core 0.
     xTaskCreatePinnedToCore(
@@ -638,7 +641,6 @@ void setup() {
     vTaskSuspend(h_stepOpenTask);
 
 }
-
 
 
 
